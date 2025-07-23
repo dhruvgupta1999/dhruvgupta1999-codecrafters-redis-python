@@ -8,11 +8,11 @@ def main():
     # Uncomment this to pass the first stage
     #
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-
-    connection, _ = server_socket.accept()
-    # see: https://redis.io/docs/latest/develop/reference/protocol-spec/#simple-strings
-    # 
-    connection.sendall(b"+PONG\r\n")
+    while True:
+        connection, _ = server_socket.accept()
+        # see: https://redis.io/docs/latest/develop/reference/protocol-spec/#simple-strings
+        # 
+        connection.sendall(b"+PONG\r\n")
 
 
 if __name__ == "__main__":
