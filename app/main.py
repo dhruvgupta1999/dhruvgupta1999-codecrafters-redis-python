@@ -8,7 +8,6 @@ def main():
     # Uncomment this to pass the first stage
     #
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    server_socket.accept() # wait for client
 
     connection, _ = server_socket.accept()
     # see: https://redis.io/docs/latest/develop/reference/protocol-spec/#simple-strings
