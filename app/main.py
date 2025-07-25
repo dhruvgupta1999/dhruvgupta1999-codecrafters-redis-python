@@ -7,7 +7,7 @@ async def handle_client(reader, writer):
     print(f"Connected to {addr}")
 
     while True:
-        data = await reader.read(10)
+        data = await reader.read(100)
         if not data:
             print(f"Connection closed by {addr}")
             break
