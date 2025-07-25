@@ -29,7 +29,7 @@ async def main():
 
     # Uncomment this to pass the first stage
     #
-    server = await asyncio.start_server(handle_client, host='127.0.0.1', port=8888)
+    server = await asyncio.start_server(handle_client, host='localhost', port=6379)
     print(len(server.sockets))
     async with server:
         await server.serve_forever()
