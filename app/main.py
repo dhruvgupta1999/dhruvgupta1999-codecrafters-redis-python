@@ -7,7 +7,7 @@ import time
 
 from app.memory_management import redis_memstore, ValueObj, NO_EXPIRY
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes, NULL_BULK_STRING, \
-    OK_SIMPLE_STRING, get_serialized_dtype
+    OK_SIMPLE_STRING, get_serialized_dtype, typecast_as_int
 
 MAX_MSG_LEN = 1000
 
@@ -45,7 +45,7 @@ def create_response(msg):
                 return serialize_msg(msg, serialized_data_type)
             case b'SET':
                 key, val = tokens[1], tokens[2]
-                expire_ms = tokens[4] if tokens[4] else NO_EXPIRY
+                expire_ms = typecast_as_int(tokens[4]) if tokens[4] else NO_EXPIRY
                 expiry_time_ms = get_unix_time_ms() + expire_ms
                 redis_memstore[key] = ValueObj(val=val, val_dtype=type(tokens[2]), unix_expiry_ms=expiry_time_ms)
                 return OK_SIMPLE_STRING

@@ -92,6 +92,13 @@ def parse_redis_bytes(msg) -> tuple[bool, Any]:
 
 ##################################################################################################
 
+def typecast_as_int(token) -> int:
+    if isinstance(token, str):
+        return int(token)
+    if isinstance(token, bytes):
+        return int(token.decode())
+    if isinstance(token, int):
+        return token
 
 def typecast_as_bytes(msg) -> bytes:
     if isinstance(msg, bytes):
