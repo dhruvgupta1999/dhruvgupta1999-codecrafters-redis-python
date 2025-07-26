@@ -5,7 +5,7 @@ import time
 
 
 
-from app.memory_management import redis_memstore, ValueObj, NO_EXPIRY
+from app.memory_management import redis_memstore, ValueObj, NO_EXPIRY, NULL_VALUE_OBJ
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes, NULL_BULK_STRING, \
     OK_SIMPLE_STRING, get_serialized_dtype, typecast_as_int
 
@@ -36,7 +36,7 @@ def create_response(msg, request_recv_time_ms):
                 result = serialize_msg(result, DataTypes.BULK_STRING)
             case b'GET':
                 key = tokens[1]
-                value_obj = redis_memstore.get(key, NULL_BULK_STRING)
+                value_obj = redis_memstore.get(key, NULL_VALUE_OBJ)
                 if (value_obj.unix_expiry_ms != NO_EXPIRY) and (request_recv_time_ms > value_obj.unix_expiry_ms):
                     print(f"{key=} expired")
                     print(f"request time = {request_recv_time_ms}")
