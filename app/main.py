@@ -48,8 +48,11 @@ def create_response(msg, request_recv_time_ms):
                 return serialize_msg(value_obj.val, serialized_data_type)
             case b'SET':
                 key, val = tokens[1], tokens[2]
-                expire_ms = typecast_as_int(tokens[4]) if len(tokens)>4 else NO_EXPIRY
-                expiry_time_ms = request_recv_time_ms + expire_ms
+                if len(tokens) > 4:
+                    expire_ms = typecast_as_int(tokens[4])
+                    expiry_time_ms = request_recv_time_ms + expire_ms
+                else:
+                    expiry_time_ms = NO_EXPIRY
                 redis_memstore[key] = ValueObj(val=val, val_dtype=type(tokens[2]), unix_expiry_ms=expiry_time_ms)
                 return OK_SIMPLE_STRING
             case _:
