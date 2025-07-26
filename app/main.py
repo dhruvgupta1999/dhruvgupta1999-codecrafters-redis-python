@@ -29,7 +29,7 @@ def create_response(msg):
             case b'GET':
                 msg, data_type = temp_data.get(tokens[1], NULL_BULK_STRING)
                 serialized_data_type = None
-                if isinstance(data_type, str):
+                if isinstance(data_type, str) or isinstance(data_type, bytes):
                     serialized_data_type = DataTypes.BULK_STRING
                 elif isinstance(data_type, Iterable):
                     serialized_data_type = DataTypes.ARRAY
