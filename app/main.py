@@ -72,11 +72,11 @@ async def handle_client(reader, writer):
             print(f"Connection closed by {addr}")
             break
         print(f"Received from {addr}: {data}")
-        err_flag, message = parse_redis_bytes(data, request_recv_time)
+        err_flag, message = parse_redis_bytes(data)
         print(f"Parsed data: {message}")
 
         response = f"+PONG\r\n"
-        writer.write(create_response(message))
+        writer.write(create_response(message, request_recv_time))
         await writer.drain()
 
     writer.close()
