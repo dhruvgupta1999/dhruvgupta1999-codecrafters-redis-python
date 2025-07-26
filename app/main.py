@@ -15,8 +15,9 @@ def create_response(msg):
     supports ECHO command.
     """
     result = b''
-    if isinstance(msg, str):
-        tokens = ' '.split(msg)
+    if isinstance(msg, list):
+        tokens = msg
+        print('first token:', tokens[0].upper())
         if tokens[0].upper() == b'ECHO':
             print("echo mode...")
             result = ' '.join(tokens[1:])
