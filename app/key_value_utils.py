@@ -7,9 +7,9 @@ from app.redis_serialization_protocol import NULL_BULK_STRING, SerializedTypes
 NO_EXPIRY = -1
 
 class ValueTypes(Enum):
-    STRING='string'
-    STREAM='stream'
-    NONE='none'
+    STRING=b'string'
+    STREAM=b'stream'
+    NONE=b'none'
 
     @classmethod
     def get_type(cls, val):
