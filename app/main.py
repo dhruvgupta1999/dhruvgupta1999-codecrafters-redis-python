@@ -1,22 +1,47 @@
 import socket  # noqa: F401
 import asyncio
 
+from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes
+
+
+MAX_MSG_LEN = 1000
+
+
+def create_response(msg):
+    """
+    create a response and return the redis protocol serialized version of it.
+
+    default -> return PONG
+    supports ECHO command.
+    """
+    result = b''
+    if isinstance(msg, str):
+        tokens = ' '.split(msg)
+        if tokens[0].upper() == 'ECHO':
+            print("echo mode...")
+            result = ' '.join(tokens[1:])
+            result = serialize_msg(result, DataTypes.BULK_STRING)
+    else:
+        result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
+    print("response created: ", result)
+    return result
+
 # This function will be called separately for each client
 async def handle_client(reader, writer):
     addr = writer.get_extra_info('peername')
     print(f"Connected to {addr}")
 
     while True:
-        data = await reader.read(100)
+        data = await reader.read(MAX_MSG_LEN)
         if not data:
             print(f"Connection closed by {addr}")
             break
 
-        message = data.decode().strip()
+        message = parse_redis_bytes(data)
         print(f"Received from {addr}: {message}")
 
         response = f"+PONG\r\n"
-        writer.write(response.encode())
+        writer.write(create_response(message))
         await writer.drain()
 
     writer.close()
