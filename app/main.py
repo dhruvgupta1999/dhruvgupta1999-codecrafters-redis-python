@@ -1,14 +1,22 @@
 import socket  # noqa: F401
 import asyncio
 from typing import Iterable
+import time
 
+
+
+from app.memory_management import redis_memstore, ValueObj, NO_EXPIRY
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes, NULL_BULK_STRING, \
     OK_SIMPLE_STRING, get_serialized_dtype
 
 MAX_MSG_LEN = 1000
 
 
-temp_data = {}
+def get_unix_time_ms():
+    # Get the current Unix timestamp as a floating-point number
+    unix_timestamp = time.time()
+    unix_ts_ms = int(unix_timestamp * 1000)
+    return unix_ts_ms
 
 def create_response(msg):
     """
@@ -27,12 +35,19 @@ def create_response(msg):
                 result = b' '.join(tokens[1:])
                 result = serialize_msg(result, DataTypes.BULK_STRING)
             case b'GET':
-                msg, data_type = temp_data.get(tokens[1], NULL_BULK_STRING)
-                serialized_data_type = get_serialized_dtype(data_type)
+                key = tokens[1]
+                value_obj = redis_memstore.get(key, NULL_BULK_STRING)
+                if (value_obj.unix_expiry_ms != NO_EXPIRY) and (get_unix_time_ms() > value_obj.unix_expiry_ms):
+                    del redis_memstore[key]
+                    return NULL_BULK_STRING
 
+                serialized_data_type = get_serialized_dtype(value_obj.val_dtype)
                 return serialize_msg(msg, serialized_data_type)
             case b'SET':
-                temp_data[tokens[1]] = (tokens[2], type(tokens[2]))
+                key, val = tokens[1], tokens[2]
+                expire_ms = tokens[4] if tokens[4] else NO_EXPIRY
+                expiry_time_ms = get_unix_time_ms() + expire_ms
+                redis_memstore[key] = ValueObj(val=val, val_dtype=type(tokens[2]), unix_expiry_ms=expiry_time_ms)
                 return OK_SIMPLE_STRING
             case _:
                 result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
