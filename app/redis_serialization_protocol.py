@@ -57,7 +57,7 @@ def parse_array(msg, start_index):
     return result
 
 def parse_primitive(msg, start_index):
-    data_type = DataTypes(msg[start_index])
+    data_type = msg[start_index:start_index+1]
     match data_type:
         case DataTypes.SIMPLE_STRING:
             return parse_simple_str(msg, start_index)
@@ -76,7 +76,7 @@ def parse_redis_bytes(msg) -> tuple[bool, Any]:
     """
     index = 0
     n = len(msg)
-    data_type = DataTypes(msg[index])
+    data_type = DataTypes(msg[index:index+1])
     if data_type == DataTypes.ERROR:
         # assuming error comes only by itself, without any other data types.
         err_msg = msg[1:-2]
