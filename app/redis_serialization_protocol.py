@@ -13,8 +13,7 @@ bulk string -> Bulk strings explicitly specify length, so they can include binar
 
 """
 from enum import Enum
-from typing import Any 
-
+from typing import Any, Iterable
 
 CLRS = b'\r\n'
 NULL_BULK_STRING = b'$-1\r\n'
@@ -118,3 +117,16 @@ def serialize_msg(msg: Any, data_type: DataTypes):
             raise NotImplementedError()
         case _:
             raise ValueError(f"Unsupported data type: {data_type}")
+
+
+def get_serialized_dtype(unserialized_dtype):
+    serialized_data_type = None
+    if unserialized_dtype ==  str or unserialized_dtype ==  bytes:
+        serialized_data_type = DataTypes.BULK_STRING
+    elif unserialized_dtype ==  Iterable:
+        serialized_data_type = DataTypes.ARRAY
+    elif unserialized_dtype ==  int:
+        serialized_data_type = DataTypes.INTEGER
+    else:
+        raise ValueError(f"ERROR: {unserialized_dtype=} unknown")
+    return serialized_data_type

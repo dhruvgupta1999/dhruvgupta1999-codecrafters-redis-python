@@ -3,7 +3,7 @@ import asyncio
 from typing import Iterable
 
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes, NULL_BULK_STRING, \
-    OK_SIMPLE_STRING
+    OK_SIMPLE_STRING, get_serialized_dtype
 
 MAX_MSG_LEN = 1000
 
@@ -28,15 +28,7 @@ def create_response(msg):
                 result = serialize_msg(result, DataTypes.BULK_STRING)
             case b'GET':
                 msg, data_type = temp_data.get(tokens[1], NULL_BULK_STRING)
-                serialized_data_type = None
-                if isinstance(data_type, str) or isinstance(data_type, bytes):
-                    serialized_data_type = DataTypes.BULK_STRING
-                elif isinstance(data_type, Iterable):
-                    serialized_data_type = DataTypes.ARRAY
-                elif isinstance(data_type, int):
-                    serialized_data_type = DataTypes.INTEGER
-                else:
-                    raise ValueError(f"ERROR: {data_type=} unknown")
+                serialized_data_type = get_serialized_dtype(data_type)
 
                 return serialize_msg(msg, serialized_data_type)
             case b'SET':
@@ -48,6 +40,7 @@ def create_response(msg):
         result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
     print("response created: ", result)
     return result
+
 
 # This function will be called separately for each client
 async def handle_client(reader, writer):
