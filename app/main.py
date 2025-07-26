@@ -52,7 +52,7 @@ def create_response(msg, request_recv_time_ms):
             case b'TYPE':
                 key = tokens[1]
                 value_obj = get_from_memstore(key, request_recv_time_ms)
-                return value_obj.val_dtype.value
+                return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
