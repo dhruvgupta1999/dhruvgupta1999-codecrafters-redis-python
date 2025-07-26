@@ -45,7 +45,7 @@ def create_response(msg, request_recv_time_ms):
                     return NULL_BULK_STRING
 
                 serialized_data_type = get_serialized_dtype(value_obj.val_dtype)
-                return serialize_msg(msg, serialized_data_type)
+                return serialize_msg(value_obj.val, serialized_data_type)
             case b'SET':
                 key, val = tokens[1], tokens[2]
                 expire_ms = typecast_as_int(tokens[4]) if tokens[4] else NO_EXPIRY
