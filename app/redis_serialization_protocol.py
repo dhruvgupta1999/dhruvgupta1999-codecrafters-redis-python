@@ -57,7 +57,7 @@ def parse_array(msg, start_index):
     return result
 
 def parse_primitive(msg, start_index):
-    data_type = msg[start_index:start_index+1]
+    data_type = DataTypes(msg[start_index:start_index+1])
     match data_type:
         case DataTypes.SIMPLE_STRING:
             return parse_simple_str(msg, start_index)
