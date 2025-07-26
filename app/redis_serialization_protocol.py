@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Any, Iterable
 
 CLRS = b'\r\n'
+NULL_BULK_STRING = b'$-1\r\n'
 OK_SIMPLE_STRING = b'+OK\r\n'
 
 class SerializedTypes(Enum):

@@ -2,10 +2,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from app.redis_serialization_protocol import SerializedTypes
+from app.redis_serialization_protocol import SerializedTypes, NULL_BULK_STRING, serialize_msg
 
 NO_EXPIRY = -1
-NULL_VALUE = b'-1'
 
 class ValueTypes(Enum):
     STRING=b'string'
@@ -33,8 +32,12 @@ class ValueObj:
     unix_expiry_ms: int
     val_dtype: ValueTypes
 
+    def get_val_serialized(self):
+        if self.val is None:
+            return NULL_BULK_STRING
+        return serialize_msg(self.val, self.val_dtype.get_serialized_dtype())
 
 
-NULL_VALUE_OBJ = ValueObj(val=NULL_VALUE, unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.NONE)
+NULL_VALUE_OBJ = ValueObj(val=None, unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.NONE)
 
 

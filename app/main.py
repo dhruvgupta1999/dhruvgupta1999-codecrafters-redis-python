@@ -37,7 +37,7 @@ def create_response(msg, request_recv_time_ms):
             case b'GET':
                 key = tokens[1]
                 value_obj = get_from_memstore(key, request_recv_time_ms)
-                result = serialize_msg(value_obj.val, value_obj.val_dtype.get_serialized_dtype())
+                result = value_obj.get_val_serialized()
                 print("GET result:", result)
                 return result
             case b'SET':
