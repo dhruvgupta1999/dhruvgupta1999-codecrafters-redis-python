@@ -33,18 +33,18 @@ class DataTypes(Enum):
 
 def parse_simple_str(msg, start_index):
     end_idx = msg.find(CLRS)
-    return msg[start_index+1, end_idx], end_idx + 2
+    return msg[start_index+1: end_idx], end_idx + 2
 
 def parse_int(msg, start_index):
     end_idx = msg.find(CLRS)
-    return int(msg[start_index+1, end_idx].decode()), end_idx + 2
+    return int(msg[start_index+1: end_idx].decode()), end_idx + 2
 
 def parse_bulk_str(msg, start_index) -> tuple[bytes, int]:
     """
     Can have arbitrary binary data, do not decode.
     """
     data_len, new_start_idx = parse_int(msg, start_index+1)
-    bulk_str = msg[new_start_idx, new_start_idx + data_len]
+    bulk_str = msg[new_start_idx: new_start_idx + data_len]
     return bulk_str, new_start_idx + data_len + 2
 
 def parse_array(msg, start_index):
