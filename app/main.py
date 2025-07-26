@@ -21,7 +21,7 @@ def create_response(msg):
         print('first token:', tokens[0].upper())
         if tokens[0].upper() == b'ECHO':
             print("echo mode...")
-            result = ' '.join(tokens[1:])
+            result = b' '.join(tokens[1:])
             result = serialize_msg(result, DataTypes.BULK_STRING)
     else:
         result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)

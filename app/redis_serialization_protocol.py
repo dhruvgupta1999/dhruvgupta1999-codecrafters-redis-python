@@ -93,17 +93,26 @@ def parse_redis_bytes(msg) -> tuple[bool, Any]:
 ##################################################################################################
 
 
+def typecast_as_bytes(msg) -> bytes:
+    if isinstance(msg, bytes):
+        return msg
+    if isinstance(msg, int):
+        return str(msg).encode()
+    if isinstance(msg, str):
+        return msg.encode()
+
 def serialize_msg(msg: Any, data_type: DataTypes):
     match data_type:
         case DataTypes.SIMPLE_STRING:
-            msg = str(msg)
-            msg = msg.encode()
+            msg = typecast_as_bytes(msg)
             return b'+' + msg + CLRS
         case DataTypes.INTEGER:
-            msg = str(msg).encode()
-            return 
+            msg = typecast_as_bytes(msg)
+            return b':' + msg + CLRS
         case DataTypes.BULK_STRING:
-            raise NotImplementedError()
+            msg = typecast_as_bytes(msg)
+            data_len_as_bytes = typecast_as_bytes(len(msg))
+            return b'$' + data_len_as_bytes + CLRS + msg + CLRS
         case DataTypes.ARRAY:
             raise NotImplementedError()
         case _:
