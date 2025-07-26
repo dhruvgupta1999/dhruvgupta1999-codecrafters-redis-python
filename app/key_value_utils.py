@@ -5,6 +5,7 @@ from typing import Any
 from app.redis_serialization_protocol import NULL_BULK_STRING, SerializedTypes
 
 NO_EXPIRY = -1
+NULL_VALUE = b'-1'
 
 class ValueTypes(Enum):
     STRING=b'string'
@@ -34,6 +35,6 @@ class ValueObj:
 
 
 
-NULL_VALUE_OBJ = ValueObj(val=NULL_BULK_STRING, unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.NONE)
+NULL_VALUE_OBJ = ValueObj(val=NULL_VALUE, unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.NONE)
 
 
