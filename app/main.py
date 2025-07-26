@@ -36,9 +36,9 @@ async def handle_client(reader, writer):
         if not data:
             print(f"Connection closed by {addr}")
             break
-
+        print(f"Received from {addr}: {data}")
         message = parse_redis_bytes(data)
-        print(f"Received from {addr}: {message}")
+        print(f"Parsed data: {message}")
 
         response = f"+PONG\r\n"
         writer.write(create_response(message))
