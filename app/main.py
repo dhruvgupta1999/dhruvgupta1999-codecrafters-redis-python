@@ -23,6 +23,8 @@ def create_response(msg):
             print("echo mode...")
             result = b' '.join(tokens[1:])
             result = serialize_msg(result, DataTypes.BULK_STRING)
+        else:
+            result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
     else:
         result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
     print("response created: ", result)
