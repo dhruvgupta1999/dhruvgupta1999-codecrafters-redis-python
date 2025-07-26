@@ -36,8 +36,7 @@ def create_response(msg):
                 elif isinstance(data_type, int):
                     serialized_data_type = DataTypes.INTEGER
                 else:
-                    print(f"ERROR: {data_type=} unknown")
-                    raise ValueError()
+                    raise ValueError(f"ERROR: {data_type=} unknown")
 
                 return serialize_msg(msg, serialized_data_type)
             case b'SET':
