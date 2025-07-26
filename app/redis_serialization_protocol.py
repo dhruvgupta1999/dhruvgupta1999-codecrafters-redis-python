@@ -48,7 +48,7 @@ def parse_bulk_str(msg, start_index) -> tuple[bytes, int]:
     return bulk_str, new_start_idx + data_len + 2
 
 def parse_array(msg, start_index):
-    arr_len, new_start_idx = parse_int(msg, start_index+1)
+    arr_len, new_start_idx = parse_int(msg, start_index)
     result = []
     index = new_start_idx
     for i in range(arr_len):
