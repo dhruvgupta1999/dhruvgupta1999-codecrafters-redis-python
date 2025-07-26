@@ -32,12 +32,16 @@ class DataTypes(Enum):
 
 
 def parse_simple_str(msg, start_index):
-    end_idx = msg.find(CLRS)
-    return msg[start_index+1: end_idx], end_idx + 2
+    msg_after_start = msg[start_index:]
+    end_idx = msg_after_start.find(CLRS)
+    return msg_after_start[1:end_idx], end_idx + 2 + start_index
 
 def parse_int(msg, start_index):
-    end_idx = msg.find(CLRS)
-    return int(msg[start_index+1: end_idx].decode()), end_idx + 2
+    msg_after_start = msg[start_index:]
+    end_idx = msg_after_start.find(CLRS)
+    print('start_index+1', start_index+1)
+    print('end_idx', end_idx)
+    return int(msg_after_start[1:end_idx].decode()), end_idx + 2 + start_index
 
 def parse_bulk_str(msg, start_index) -> tuple[bytes, int]:
     """
@@ -54,7 +58,7 @@ def parse_array(msg, start_index):
     for i in range(arr_len):
         e, index = parse_primitive(msg, index)
         result.append(e)
-    return result
+    return result, index
 
 def parse_primitive(msg, start_index):
     data_type = DataTypes(msg[start_index:start_index+1])
@@ -82,7 +86,7 @@ def parse_redis_bytes(msg) -> tuple[bool, Any]:
         err_msg = msg[1:-2]
         return True, err_msg
     else:
-        return False, parse_primitive(msg, index)
+        return False, parse_primitive(msg, index)[0]
 
 
 
