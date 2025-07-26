@@ -43,7 +43,7 @@ def parse_bulk_str(msg, start_index) -> tuple[bytes, int]:
     """
     Can have arbitrary binary data, do not decode.
     """
-    data_len, new_start_idx = parse_int(msg, start_index+1)
+    data_len, new_start_idx = parse_int(msg, start_index)
     bulk_str = msg[new_start_idx: new_start_idx + data_len]
     return bulk_str, new_start_idx + data_len + 2
 
