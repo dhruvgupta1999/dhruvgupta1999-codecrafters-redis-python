@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from app.redis_serialization_protocol import NULL_BULK_STRING, SerializedTypes
+from app.redis_serialization_protocol import SerializedTypes
 
 NO_EXPIRY = -1
 NULL_VALUE = b'-1'
