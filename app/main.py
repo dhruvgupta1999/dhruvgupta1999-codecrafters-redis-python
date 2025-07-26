@@ -2,11 +2,13 @@ import socket  # noqa: F401
 import asyncio
 from typing import Iterable
 
-from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes
-
+from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes, NULL_BULK_STRING, \
+    OK_SIMPLE_STRING
 
 MAX_MSG_LEN = 1000
 
+
+temp_data = {}
 
 def create_response(msg):
     """
@@ -18,13 +20,31 @@ def create_response(msg):
     result = b''
     if isinstance(msg, Iterable):
         tokens = list(msg)
-        print('first token:', tokens[0].upper())
-        if tokens[0].upper() == b'ECHO':
-            print("echo mode...")
-            result = b' '.join(tokens[1:])
-            result = serialize_msg(result, DataTypes.BULK_STRING)
-        else:
-            result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
+        first_token = tokens[0].upper()
+        print('first token:', first_token)
+        match first_token:
+            case b'ECHO':
+                result = b' '.join(tokens[1:])
+                result = serialize_msg(result, DataTypes.BULK_STRING)
+            case b'GET':
+                msg, data_type = temp_data.get(tokens[1], NULL_BULK_STRING)
+                serialized_data_type = None
+                if isinstance(data_type, str):
+                    serialized_data_type = DataTypes.BULK_STRING
+                elif isinstance(data_type, Iterable):
+                    serialized_data_type = DataTypes.ARRAY
+                elif isinstance(data_type, int):
+                    serialized_data_type = DataTypes.INTEGER
+                else:
+                    print(f"ERROR: {data_type=} unknown")
+                    raise ValueError()
+
+                return serialize_msg(msg, serialized_data_type)
+            case b'SET':
+                temp_data[tokens[1]] = (tokens[2], type(tokens[2]))
+                return OK_SIMPLE_STRING
+            case _:
+                result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
     else:
         result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
     print("response created: ", result)
