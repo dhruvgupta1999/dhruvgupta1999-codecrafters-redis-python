@@ -17,7 +17,7 @@ def create_response(msg):
     result = b''
     if isinstance(msg, str):
         tokens = ' '.split(msg)
-        if tokens[0].upper() == 'ECHO':
+        if tokens[0].upper() == b'ECHO':
             print("echo mode...")
             result = ' '.join(tokens[1:])
             result = serialize_msg(result, DataTypes.BULK_STRING)
