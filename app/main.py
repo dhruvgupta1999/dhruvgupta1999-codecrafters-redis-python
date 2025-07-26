@@ -1,5 +1,6 @@
 import socket  # noqa: F401
 import asyncio
+from typing import Iterable
 
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes
 
@@ -15,8 +16,8 @@ def create_response(msg):
     supports ECHO command.
     """
     result = b''
-    if isinstance(msg, list):
-        tokens = msg
+    if isinstance(msg, Iterable):
+        tokens = list(msg)
         print('first token:', tokens[0].upper())
         if tokens[0].upper() == b'ECHO':
             print("echo mode...")
@@ -38,7 +39,7 @@ async def handle_client(reader, writer):
             print(f"Connection closed by {addr}")
             break
         print(f"Received from {addr}: {data}")
-        message = parse_redis_bytes(data)
+        err_flag, message = parse_redis_bytes(data)
         print(f"Parsed data: {message}")
 
         response = f"+PONG\r\n"
