@@ -1,5 +1,5 @@
 import pytest
-from app.redis_serialization_protocol import parse_redis_bytes, DataTypes
+from app.redis_serialization_protocol import parse_redis_bytes, SerializedTypes
 
 
 def test_parse_redis_bytes_simple_string():

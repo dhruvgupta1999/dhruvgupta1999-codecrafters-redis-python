@@ -5,9 +5,9 @@ import time
 
 
 
-from app.memory_management import redis_memstore, ValueObj, NO_EXPIRY, NULL_VALUE_OBJ
-from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, DataTypes, NULL_BULK_STRING, \
-    OK_SIMPLE_STRING, get_serialized_dtype, typecast_as_int
+from app.memory_management import redis_memstore, get_from_memstore
+from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
+from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, typecast_as_int
 
 MAX_MSG_LEN = 1000
 
@@ -33,32 +33,31 @@ def create_response(msg, request_recv_time_ms):
         match first_token:
             case b'ECHO':
                 result = b' '.join(tokens[1:])
-                result = serialize_msg(result, DataTypes.BULK_STRING)
+                result = serialize_msg(result, SerializedTypes.BULK_STRING)
             case b'GET':
                 key = tokens[1]
-                value_obj = redis_memstore.get(key, NULL_VALUE_OBJ)
-                if (value_obj.unix_expiry_ms != NO_EXPIRY) and (request_recv_time_ms > value_obj.unix_expiry_ms):
-                    print(f"{key=} expired")
-                    print(f"request time = {request_recv_time_ms}")
-                    print(f"expiry time = {value_obj.unix_expiry_ms}")
-                    del redis_memstore[key]
-                    return NULL_BULK_STRING
-
-                serialized_data_type = get_serialized_dtype(value_obj.val_dtype)
-                return serialize_msg(value_obj.val, serialized_data_type)
+                value_obj = get_from_memstore(key, request_recv_time_ms)
+                return serialize_msg(value_obj.val, value_obj.val_dtype.get_serialized_dtype())
             case b'SET':
-                key, val = tokens[1], tokens[2]
+                key, val= tokens[1], tokens[2]
                 if len(tokens) > 4:
-                    expire_ms = typecast_as_int(tokens[4])
-                    expiry_time_ms = request_recv_time_ms + expire_ms
+                    time_to_live_ms = typecast_as_int(tokens[4])
+                    expiry_time_ms = request_recv_time_ms + time_to_live_ms
                 else:
                     expiry_time_ms = NO_EXPIRY
-                redis_memstore[key] = ValueObj(val=val, val_dtype=type(tokens[2]), unix_expiry_ms=expiry_time_ms)
+
+                val_type = ValueTypes.get_type(val)
+                redis_memstore[key] = ValueObj(val=val, val_dtype=val_type, unix_expiry_ms=expiry_time_ms)
                 return OK_SIMPLE_STRING
+            case b'TYPE':
+                key = tokens[1]
+                value_obj = get_from_memstore(key, request_recv_time_ms)
+                return value_obj.val_dtype.value
+
             case _:
-                result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
+                result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
     else:
-        result = serialize_msg('PONG', DataTypes.SIMPLE_STRING)
+        result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
     print("response created: ", result)
     return result
 
@@ -70,6 +69,11 @@ async def handle_client(reader, writer):
 
     while True:
         data = await reader.read(MAX_MSG_LEN)
+        # VERY IMP: Note down the time the request was received.
+        # TO make sure the expiry time ms is calculated accurately.
+        # For SET: request_recv_time + time_to_live is set as value_obj.expiry_time
+        # For GET: request_recv_time < value_obj.expiry_time determines whether expired or not.
+        # If use some later time rather than request_recv_time, then my expiry will be inaccurate.
         request_recv_time = get_unix_time_ms()
         if not data:
             print(f"Connection closed by {addr}")
@@ -78,7 +82,6 @@ async def handle_client(reader, writer):
         err_flag, message = parse_redis_bytes(data)
         print(f"Parsed data: {message}")
 
-        response = f"+PONG\r\n"
         writer.write(create_response(message, request_recv_time))
         await writer.drain()
 

@@ -19,13 +19,12 @@ CLRS = b'\r\n'
 NULL_BULK_STRING = b'$-1\r\n'
 OK_SIMPLE_STRING = b'+OK\r\n'
 
-class DataTypes(Enum):
+class SerializedTypes(Enum):
     SIMPLE_STRING=b'+'
     ERROR = b'-'
     INTEGER = b':'
     BULK_STRING = b'$'
     ARRAY = b'*'
-
 
 # All the functions take in the msg, start_index.
 # They only parse the prefix of the msg then return that parsed prefix and the index just after that parsed prefix.
@@ -61,15 +60,15 @@ def parse_array(msg, start_index):
     return result, index
 
 def parse_primitive(msg, start_index):
-    data_type = DataTypes(msg[start_index:start_index+1])
+    data_type = SerializedTypes(msg[start_index:start_index + 1])
     match data_type:
-        case DataTypes.SIMPLE_STRING:
+        case SerializedTypes.SIMPLE_STRING:
             return parse_simple_str(msg, start_index)
-        case DataTypes.INTEGER:
+        case SerializedTypes.INTEGER:
             return parse_int(msg, start_index)
-        case DataTypes.BULK_STRING:
+        case SerializedTypes.BULK_STRING:
             return parse_bulk_str(msg, start_index)
-        case DataTypes.ARRAY:
+        case SerializedTypes.ARRAY:
             return parse_array(msg, start_index)
         case _:
             raise ValueError(f"Unsupported data type: {data_type}")
@@ -80,8 +79,8 @@ def parse_redis_bytes(msg) -> tuple[bool, Any]:
     """
     index = 0
     n = len(msg)
-    data_type = DataTypes(msg[index:index+1])
-    if data_type == DataTypes.ERROR:
+    data_type = SerializedTypes(msg[index:index + 1])
+    if data_type == SerializedTypes.ERROR:
         # assuming error comes only by itself, without any other data types.
         err_msg = msg[1:-2]
         return True, err_msg
@@ -108,32 +107,20 @@ def typecast_as_bytes(msg) -> bytes:
     if isinstance(msg, str):
         return msg.encode()
 
-def serialize_msg(msg: Any, data_type: DataTypes):
+def serialize_msg(msg: Any, data_type: SerializedTypes):
     match data_type:
-        case DataTypes.SIMPLE_STRING:
+        case SerializedTypes.SIMPLE_STRING:
             msg = typecast_as_bytes(msg)
             return b'+' + msg + CLRS
-        case DataTypes.INTEGER:
+        case SerializedTypes.INTEGER:
             msg = typecast_as_bytes(msg)
             return b':' + msg + CLRS
-        case DataTypes.BULK_STRING:
+        case SerializedTypes.BULK_STRING:
             msg = typecast_as_bytes(msg)
             data_len_as_bytes = typecast_as_bytes(len(msg))
             return b'$' + data_len_as_bytes + CLRS + msg + CLRS
-        case DataTypes.ARRAY:
+        case SerializedTypes.ARRAY:
             raise NotImplementedError()
         case _:
             raise ValueError(f"Unsupported data type: {data_type}")
 
-
-def get_serialized_dtype(unserialized_dtype):
-    serialized_data_type = None
-    if unserialized_dtype ==  str or unserialized_dtype ==  bytes:
-        serialized_data_type = DataTypes.BULK_STRING
-    elif unserialized_dtype ==  Iterable:
-        serialized_data_type = DataTypes.ARRAY
-    elif unserialized_dtype ==  int:
-        serialized_data_type = DataTypes.INTEGER
-    else:
-        raise ValueError(f"ERROR: {unserialized_dtype=} unknown")
-    return serialized_data_type
