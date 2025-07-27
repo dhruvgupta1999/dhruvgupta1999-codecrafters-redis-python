@@ -64,7 +64,7 @@ def create_response(msg, request_recv_time_ms):
             case b'XRANGE':
                 stream_name = tokens[1]
                 start, end = tokens[2].decode(), tokens[3].decode()
-                result = redis_memstore[stream_name].xrange(start, end)
+                result = redis_memstore[stream_name].val.xrange(start, end)
                 return serialize_msg(result, SerializedTypes.ARRAY)
 
             case _:
