@@ -51,12 +51,12 @@ def create_response(msg, request_recv_time_ms):
                 value_obj = get_from_memstore(key, request_recv_time_ms)
                 return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
             case b'XADD':
-                stream_name = tokens[1]
-                event_ts_id = tokens[2]
+                stream_name = tokens[1].decode()
+                event_ts_id = tokens[2].decode()
                 print(f"XADD {stream_name=} {event_ts_id=}")
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
                 try:
-                    event_ts_id = append_stream_event(stream_name.decode(), event_ts_id.decode(), val_dict)
+                    event_ts_id = append_stream_event(stream_name, event_ts_id, val_dict)
                 except InvalidStreamEventTsId as e:
                     return serialize_msg(str(e), SerializedTypes.ERROR)
                 pretty_print_stream(stream_name)
