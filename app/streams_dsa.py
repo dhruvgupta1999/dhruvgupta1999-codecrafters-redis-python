@@ -194,13 +194,19 @@ class RedisStream:
         if self._latest_leaf == self._first_leaf:
             return self._latest_leaf
         while not (isinstance(node, _LeafNode) or (node is None)):
+            parent = node
             for i in range(9,-1,-1):
                 if str(i) in node.children:
                     node = node.children[str(i)]
                     break
+            if node == parent:
+                return None
         return node
 
     def _get_branch_node_with_prefix_event_ts(self, prefix_event_ts_id):
+        """
+        If the branch doesn't exist, create it. (MAY have to change this later).
+        """
         cur_node = self._root
         for ch in prefix_event_ts_id:
             if ch not in cur_node.children:
