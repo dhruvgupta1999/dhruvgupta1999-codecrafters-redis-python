@@ -163,12 +163,10 @@ class RedisStream:
             raise InvalidStreamEventTsId("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 
     def pretty_print(self):
-        idx = 0
         print("Here is the redis stream")
         cur_leaf = self._first_leaf.next_leaf
         if not cur_leaf:
             print("Stream is empty right now.")
         while cur_leaf:
-            print(idx, cur_leaf.val)
-            idx += 1
+            print(cur_leaf.event_ts_id, cur_leaf.val)
             cur_leaf = cur_leaf.next_leaf

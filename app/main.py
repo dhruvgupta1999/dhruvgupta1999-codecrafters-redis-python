@@ -62,7 +62,7 @@ def create_response(msg, request_recv_time_ms):
                 except InvalidStreamEventTsId as e:
                     return serialize_msg(str(e), SerializedTypes.ERROR)
                 pretty_print_stream(stream_name)
-                return serialize_msg(event_ts_id, SerializedTypes.BULK_STRING)
+                return serialize_msg(event_ts_id.as_bytes(), SerializedTypes.BULK_STRING)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)

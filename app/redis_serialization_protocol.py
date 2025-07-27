@@ -107,7 +107,7 @@ def typecast_as_bytes(msg) -> bytes:
     if isinstance(msg, str):
         return msg.encode()
 
-def serialize_msg(msg: Any, data_type: SerializedTypes):
+def serialize_msg(msg: int|bytes|str, data_type: SerializedTypes):
     match data_type:
         case SerializedTypes.SIMPLE_STRING:
             msg = typecast_as_bytes(msg)
