@@ -55,6 +55,7 @@ so the timestamp_id becomes:
 <20digits of ms value><2 digits of seq num>
 
 """
+import time
 from dataclasses import dataclass, field
 from typing import Self
 
@@ -69,6 +70,12 @@ def as_x_digit_str(x, val:str) -> str:
         raise ValueError(f"More digits in input than expected: {val}")
     result = ('0' * (x-num_dig)) + val
     return result
+
+def get_unix_time_ms():
+    # Get the current Unix timestamp as a floating-point number
+    unix_timestamp = time.time()
+    unix_ts_ms = int(unix_timestamp * 1000)
+    return unix_ts_ms
 
 ####################################################################################################
 
@@ -132,7 +139,7 @@ class RedisStream:
     def resolve_event_ts_id(self, event_ts_id):
         ts_str, seq_num_str = event_ts_id.split('-')
         if ts_str == '*':
-            raise NotImplementedError()
+            ts_str = str(get_unix_time_ms())
         trie_key_ts_part = as_x_digit_str(NUM_DIGITS_TS, ts_str)
         if seq_num_str == '*':
             seq_num_str = self._get_next_seq_no(trie_key_ts_part)
