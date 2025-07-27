@@ -80,7 +80,7 @@ class StreamTimestampId:
         return internal_event_ts_id
 
     def __eq__(self, other: Self):
-        return self.as_stream_internal_ts_id() == other.as_stream_internal_ts_id()
+        return self._timestamp_and_seq_no() == other._timestamp_and_seq_no()
 
     def __gt__(self, other):
         # Do tuple comparison
@@ -157,6 +157,9 @@ class RedisStream:
         self._latest_leaf.next_leaf = cur_node.children[last_ch]
 
     def validate_ts_id(self, event_ts_id: StreamTimestampId):
+        print("In validate ts id")
+        print(f"{event_ts_id=}")
+        print(f"latest ts id: {self._latest_leaf.event_ts_id}")
         if event_ts_id <= self._first_leaf.event_ts_id :
             raise InvalidStreamEventTsId("ERR The ID specified in XADD must be greater than 0-0")
         if event_ts_id <= self._latest_leaf.event_ts_id:
