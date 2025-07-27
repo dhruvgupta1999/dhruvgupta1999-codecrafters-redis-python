@@ -119,6 +119,9 @@ def serialize_msg(msg: Any, data_type: SerializedTypes):
             msg = typecast_as_bytes(msg)
             data_len_as_bytes = typecast_as_bytes(len(msg))
             return b'$' + data_len_as_bytes + CLRS + msg + CLRS
+        case SerializedTypes.ERROR:
+            msg = typecast_as_bytes(msg)
+            return SerializedTypes.ERROR.value + msg + CLRS
         case SerializedTypes.ARRAY:
             raise NotImplementedError()
         case _:

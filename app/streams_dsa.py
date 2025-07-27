@@ -33,10 +33,12 @@ If the ts given to us has lesser digits, I append 0s at the beginning.
 
 
 Now there is a small nuance.
+Entry IDs are always composed of two integers: <millisecondsTime>-<sequenceNumber>
 
 the ids given to us can have
 53424-1
 53424-2
+
 and so on.
 
 This is basically because at the same ms we got multiple entries.
@@ -54,10 +56,48 @@ so the timestamp_id becomes:
 
 """
 from dataclasses import dataclass, field
+from functools import total_ordering
 from typing import Self
+
+from app.errors import InvalidStreamEventTsId
 
 NUM_DIGITS_TS = 20
 NUM_DIGITS_SEQ = 2
+
+
+@total_ordering
+@dataclass
+class StreamTimestampId:
+
+    _val: bytes
+
+    def as_bytes(self):
+        return self._val
+
+    def as_stream_internal_ts_id(self):
+        event_ts_id_str = self._val.decode()
+        ts_ms, seq_no = event_ts_id_str.split('-')
+        ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
+        seq_no = as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
+        internal_event_ts_id = ts_ms + seq_no
+        return internal_event_ts_id
+
+    def __eq__(self, other: Self):
+        return self.as_stream_internal_ts_id() == other.as_stream_internal_ts_id()
+
+    def __gt__(self, other):
+        return self.as_stream_internal_ts_id() > other.as_stream_internal_ts_id()
+
+
+def as_x_digit_str(x, val:str) -> str:
+    num_dig = len(val)
+    if num_dig > x:
+        raise ValueError(f"More digits in input than expected: {val}")
+    result = ('0' * (x-num_dig)) + val
+    return result
+
+####################################################################################################
+
 
 @dataclass
 class _BranchNode:
@@ -73,7 +113,7 @@ class _LeafNode:
     This helps us avoid going up and down the tree repeatedly to get the next/previous nodes
     since we primarily do range queries.
     """
-    event_ts_id: bytes
+    event_ts_id: StreamTimestampId
     val: dict|None
     prev_leaf: Self = None
     next_leaf: Self = None
@@ -83,10 +123,10 @@ class RedisStream:
 
     def __init__(self):
         self._root = _BranchNode()
-        self._first_leaf = _LeafNode(event_ts_id=b'-1', val=None, prev_leaf=None, next_leaf=None)
+        self._first_leaf = _LeafNode(event_ts_id=StreamTimestampId(b'0-0'), val=None, prev_leaf=None, next_leaf=None)
         self._latest_leaf: _LeafNode = self._first_leaf
 
-    def append(self, event_ts_id: bytes, val_dict):
+    def append(self, event_ts_id: StreamTimestampId, val_dict):
         """
         event_ts_id is a string with a fixed known number of digits.
 
@@ -97,8 +137,8 @@ class RedisStream:
         branch2->3 = branch3
         branch3->1 = leafnode
         """
-        print(f"appending {event_ts_id=}")
-        internal_event_ts_id = self.get_internal_event_ts_id(event_ts_id)
+        self.validate_ts_id(event_ts_id)
+        internal_event_ts_id = event_ts_id.as_stream_internal_ts_id()
         cur_node = self._root
         for ch in internal_event_ts_id[:-1]:
             if ch not in cur_node.children:
@@ -111,13 +151,11 @@ class RedisStream:
         cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
         self._latest_leaf.next_leaf = cur_node.children[last_ch]
 
-    def get_internal_event_ts_id(self, event_ts_id: bytes) -> str:
-        event_ts_id_str = event_ts_id.decode()
-        ts_ms, seq_no = event_ts_id_str.split('-')
-        ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
-        seq_no = as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
-        internal_event_ts_id = ts_ms + seq_no
-        return internal_event_ts_id
+    def validate_ts_id(self, event_ts_id: StreamTimestampId):
+        if self._latest_leaf.event_ts_id < event_ts_id:
+            raise InvalidStreamEventTsId("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+        if self._first_leaf.event_ts_id >= event_ts_id:
+            raise InvalidStreamEventTsId("ERR The ID specified in XADD must be greater than 0-0")
 
     def pretty_print(self):
         idx = 0
@@ -129,10 +167,3 @@ class RedisStream:
             print(idx, cur_leaf.val)
             idx += 1
             cur_leaf = cur_leaf.next_leaf
-
-def as_x_digit_str(x, val:str) -> str:
-    num_dig = len(val)
-    if num_dig > x:
-        raise ValueError(f"More digits in input than expected: {val}")
-    result = ('0' * (x-num_dig)) + val
-    return result

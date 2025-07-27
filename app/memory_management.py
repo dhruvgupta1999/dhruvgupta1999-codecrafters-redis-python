@@ -4,7 +4,7 @@ Logic to manage the memory.
 from collections import defaultdict
 
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
-from app.streams_dsa import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ
+from app.streams_dsa import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ, StreamTimestampId
 
 redis_memstore: [bytes, ValueObj] = {}
 
@@ -29,7 +29,9 @@ def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
     redis_memstore[key] = ValueObj(val=val, val_dtype=val_type, unix_expiry_ms=expiry_time_ms)
 
 
-def append_event(stream_name:bytes, event_ts_id:bytes, val_dict):
+# Streams
+
+def append_stream_event(stream_name:bytes, event_ts_id:StreamTimestampId, val_dict):
     if stream_name not in redis_memstore:
         redis_memstore[stream_name] = ValueObj(val=RedisStream(), unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.STREAM)
     redis_memstore[stream_name].val.append(event_ts_id, val_dict)
