@@ -1,7 +1,10 @@
 """
 Logic to manage the memory.
 """
+from collections import defaultdict
+
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
+from app.streams_dsa import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ
 
 redis_memstore: [bytes, ValueObj] = {}
 
@@ -24,3 +27,17 @@ def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
 
     val_type = ValueTypes.get_type(val)
     redis_memstore[key] = ValueObj(val=val, val_dtype=val_type, unix_expiry_ms=expiry_time_ms)
+
+
+def append_event(stream_name:bytes, event_ts_id:bytes, val_dict):
+    if stream_name not in redis_memstore:
+        redis_memstore[stream_name] = ValueObj(val=RedisStream(), unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.STREAM)
+    redis_memstore[stream_name].val.append(event_ts_id, val_dict)
+    print(f"Appended {stream_name=} {event_ts_id=}:\n {val_dict}")
+
+
+def pretty_print_stream(stream_name):
+    if stream_name not in redis_memstore:
+        raise ValueError(f"Unknown stream: {stream_name}")
+    stream_obj = redis_memstore[stream_name].val
+    stream_obj.pretty_print()

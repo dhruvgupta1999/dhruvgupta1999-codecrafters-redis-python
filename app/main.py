@@ -3,9 +3,7 @@ import asyncio
 from typing import Iterable
 import time
 
-
-
-from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore
+from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_event
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, typecast_as_int
 
@@ -52,12 +50,11 @@ def create_response(msg, request_recv_time_ms):
                 value_obj = get_from_memstore(key, request_recv_time_ms)
                 return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
             case b'XADD':
-                stream_key = b''
-                if tokens[1] == b'stream_key':
-                    stream_key = tokens[2]
+                stream_name = tokens[1]
+                event_ts_id = tokens[2]
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
-                set_to_memstore(request_recv_time_ms, stream_key, val_dict, None)
-                return serialize_msg(stream_key, SerializedTypes.BULK_STRING)
+                append_event(stream_name, event_ts_id, val_dict)
+                return serialize_msg(event_ts_id, SerializedTypes.BULK_STRING)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
