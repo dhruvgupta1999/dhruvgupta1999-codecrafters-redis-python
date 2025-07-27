@@ -75,10 +75,7 @@ class StreamTimestampId:
         return self._val
 
     def as_stream_internal_ts_id(self):
-        event_ts_id_str = self._val.decode()
-        ts_ms, seq_no = event_ts_id_str.split('-')
-        ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
-        seq_no = as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
+        ts_ms, seq_no = self._timestamp_and_seq_no()
         internal_event_ts_id = ts_ms + seq_no
         return internal_event_ts_id
 
@@ -86,7 +83,15 @@ class StreamTimestampId:
         return self.as_stream_internal_ts_id() == other.as_stream_internal_ts_id()
 
     def __gt__(self, other):
-        return self.as_stream_internal_ts_id() > other.as_stream_internal_ts_id()
+        # Do tuple comparison
+        return self._timestamp_and_seq_no() > other._timestamp_and_seq_no()
+
+    def _timestamp_and_seq_no(self):
+        event_ts_id_str = self._val.decode()
+        ts_ms, seq_no = event_ts_id_str.split('-')
+        ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
+        seq_no = as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
+        return ts_ms, seq_no
 
 
 def as_x_digit_str(x, val:str) -> str:
@@ -152,10 +157,10 @@ class RedisStream:
         self._latest_leaf.next_leaf = cur_node.children[last_ch]
 
     def validate_ts_id(self, event_ts_id: StreamTimestampId):
-        if self._latest_leaf.event_ts_id < event_ts_id:
-            raise InvalidStreamEventTsId("ERR The ID specified in XADD is equal or smaller than the target stream top item")
-        if self._first_leaf.event_ts_id >= event_ts_id:
+        if event_ts_id <= self._first_leaf.event_ts_id :
             raise InvalidStreamEventTsId("ERR The ID specified in XADD must be greater than 0-0")
+        if event_ts_id <= self._latest_leaf.event_ts_id:
+            raise InvalidStreamEventTsId("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 
     def pretty_print(self):
         idx = 0
