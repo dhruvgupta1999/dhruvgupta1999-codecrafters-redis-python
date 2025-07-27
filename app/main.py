@@ -51,7 +51,7 @@ def create_response(msg, request_recv_time_ms):
                 value_obj = get_from_memstore(key, request_recv_time_ms)
                 return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
             case b'XADD':
-                stream_name = tokens[1].decode()
+                stream_name = tokens[1]
                 event_ts_id = tokens[2].decode()
                 print(f"XADD {stream_name=} {event_ts_id=}")
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}

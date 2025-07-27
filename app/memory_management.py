@@ -9,7 +9,7 @@ from app.streams_dsa import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ
 redis_memstore: [bytes, ValueObj] = {}
 
 
-def get_from_memstore(key, request_recv_time_ms):
+def get_from_memstore(key:bytes, request_recv_time_ms):
     value_obj = redis_memstore.get(key, NULL_VALUE_OBJ)
     if (value_obj.unix_expiry_ms != NO_EXPIRY) and (request_recv_time_ms > value_obj.unix_expiry_ms):
         print(f"{key=} expired")
@@ -31,7 +31,7 @@ def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
 
 # Streams
 
-def append_stream_event(stream_name:str, event_ts_id:str, val_dict):
+def append_stream_event(stream_name:bytes, event_ts_id:str, val_dict):
     if stream_name not in redis_memstore:
         redis_memstore[stream_name] = ValueObj(val=RedisStream(), unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.STREAM)
     event_ts_id = redis_memstore[stream_name].val.append(event_ts_id, val_dict)
