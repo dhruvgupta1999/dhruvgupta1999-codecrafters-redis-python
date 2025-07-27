@@ -83,7 +83,7 @@ class RedisStream:
 
     def __init__(self):
         self._root = _BranchNode()
-        self._first_leaf = _LeafNode(val=None, prev_leaf=None, next_leaf=None)
+        self._first_leaf = _LeafNode(event_ts_id=b'-1', val=None, prev_leaf=None, next_leaf=None)
         self._latest_leaf: _LeafNode = self._first_leaf
 
     def append(self, event_ts_id: bytes, val_dict):
