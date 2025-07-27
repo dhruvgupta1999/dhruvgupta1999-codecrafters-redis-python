@@ -7,7 +7,6 @@ from app.errors import InvalidStreamEventTsId
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, pretty_print_stream
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, typecast_as_int
-from app.streams_dsa import StreamTimestampId
 
 MAX_MSG_LEN = 1000
 
@@ -56,13 +55,12 @@ def create_response(msg, request_recv_time_ms):
                 event_ts_id = tokens[2]
                 print(f"XADD {stream_name=} {event_ts_id=}")
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
-                event_ts_id = StreamTimestampId(event_ts_id)
                 try:
-                    event_ts_id = append_stream_event(stream_name, event_ts_id, val_dict)
+                    event_ts_id = append_stream_event(stream_name.decode(), event_ts_id.decode(), val_dict)
                 except InvalidStreamEventTsId as e:
                     return serialize_msg(str(e), SerializedTypes.ERROR)
                 pretty_print_stream(stream_name)
-                return serialize_msg(event_ts_id.as_bytes(), SerializedTypes.BULK_STRING)
+                return serialize_msg(event_ts_id, SerializedTypes.BULK_STRING)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)

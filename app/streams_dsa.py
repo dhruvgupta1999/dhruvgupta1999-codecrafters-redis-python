@@ -56,57 +56,12 @@ so the timestamp_id becomes:
 
 """
 from dataclasses import dataclass, field
-from functools import total_ordering
 from typing import Self
 
 from app.errors import InvalidStreamEventTsId
 
 NUM_DIGITS_TS = 20
 NUM_DIGITS_SEQ = 2
-
-
-@total_ordering
-@dataclass
-class StreamTimestampId:
-
-    _val: bytes
-
-    def as_bytes(self):
-        return self._val
-
-    @property
-    def timestamp(self) -> str:
-        """
-        time in ms
-        """
-        event_ts_id_str = self._val.decode()
-        ts_ms, seq_no = event_ts_id_str.split('-')
-        return ts_ms
-
-    @property
-    def seq_no(self) -> str:
-        event_ts_id_str = self._val.decode()
-        ts_ms, seq_no = event_ts_id_str.split('-')
-        return seq_no
-
-    def __eq__(self, other: Self):
-        if '*' in (self.timestamp, self.seq_no, other.timestamp, other.seq_no):
-            raise ValueError(f"Can't compare due to '*' {self=} {other=}")
-        return self._timestamp_and_seq_no() == other._timestamp_and_seq_no()
-
-    def __gt__(self, other):
-        if '*' in (self.timestamp, self.seq_no, other.timestamp, other.seq_no):
-            raise ValueError(f"Can't compare due to '*' {self=} {other=}")
-        # Do tuple comparison
-        return self._timestamp_and_seq_no() > other._timestamp_and_seq_no()
-
-    def _timestamp_and_seq_no(self):
-        event_ts_id_str = self._val.decode()
-        ts_ms, seq_no = event_ts_id_str.split('-')
-        ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
-        seq_no = as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
-        return ts_ms, seq_no
-
 
 def as_x_digit_str(x, val:str) -> str:
     num_dig = len(val)
@@ -132,7 +87,7 @@ class _LeafNode:
     This helps us avoid going up and down the tree repeatedly to get the next/previous nodes
     since we primarily do range queries.
     """
-    event_ts_id: StreamTimestampId
+    event_ts_id: str
     val: dict|None
     prev_leaf: Self = None
     next_leaf: Self = None
@@ -142,10 +97,10 @@ class RedisStream:
 
     def __init__(self):
         self._root = _BranchNode()
-        self._first_leaf = _LeafNode(event_ts_id=StreamTimestampId(b'0-0'), val=None, prev_leaf=None, next_leaf=None)
+        self._first_leaf = _LeafNode(event_ts_id='0-0', val=None, prev_leaf=None, next_leaf=None)
         self._latest_leaf: _LeafNode = self._first_leaf
 
-    def append(self, event_ts_id: StreamTimestampId, val_dict):
+    def append(self, event_ts_id: str, val_dict) -> str:
         """
         event_ts_id is a string with a fixed known number of digits.
 
@@ -156,43 +111,47 @@ class RedisStream:
         branch2->3 = branch3
         branch3->1 = leafnode
         """
+        event_ts_id = self.resolve_event_ts_id(event_ts_id)
+        ts_str, seq_num_str = event_ts_id.split('-')
 
-        ts, seq_no = event_ts_id.timestamp, event_ts_id.seq_no
-        if ts == '*':
-            raise NotImplementedError()
-        if seq_no == '*':
-            seq_no = self._get_next_seq_no(ts)
-
-        event_ts_id = StreamTimestampId(f"{ts}-{seq_no}".encode())
-
-        internal_event_ts_id = as_x_digit_str(NUM_DIGITS_TS, ts) + as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
-        print(f"internal event ts id: {internal_event_ts_id}")
-        cur_node = self._get_branch_node_with_prefix_event_ts(internal_event_ts_id[:-1])
+        trie_key_ts_part = as_x_digit_str(NUM_DIGITS_TS, ts_str)
+        self._validate_ts_id(ts_str, seq_num_str)
+        trie_key_seq_num_part = as_x_digit_str(NUM_DIGITS_SEQ, seq_num_str)
+        trie_key = trie_key_ts_part + trie_key_seq_num_part
+        print(f"trie key: {trie_key}")
+        cur_node = self._get_branch_node_with_prefix_event_ts(trie_key[:-1])
         # Last character maps to a leaf node.
-        last_ch = internal_event_ts_id[-1]
+        last_ch = trie_key[-1]
         if last_ch in cur_node.children:
             raise ValueError(f"{event_ts_id=} already exists:", cur_node.children[last_ch])
         new_latest_leaf = cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
         self._latest_leaf.next_leaf = new_latest_leaf
         self._latest_leaf = new_latest_leaf
-        return event_ts_id
+        return f"{ts_str}-{seq_num_str}"
 
-    def _get_next_seq_no(self, ts):
-        cur_node = self._get_branch_node_with_prefix_event_ts(ts)
+    def resolve_event_ts_id(self, event_ts_id):
+        ts_str, seq_num_str = event_ts_id.split('-')
+        if ts_str == '*':
+            raise NotImplementedError()
+        trie_key_ts_part = as_x_digit_str(NUM_DIGITS_TS, ts_str)
+        if seq_num_str == '*':
+            seq_num_str = self._get_next_seq_no(trie_key_ts_part)
+        return ts_str + '-' +  seq_num_str
+
+    def _get_next_seq_no(self, trie_key_ts_part):
+        cur_node = self._get_branch_node_with_prefix_event_ts(trie_key_ts_part)
         latest_leaf = self._get_latest_leaf(cur_node)
-        if not latest_leaf:
-            seq_no = '1' if ts == '0' else '0'
+        if latest_leaf is None:
+            seq_no = '1' if trie_key_ts_part == as_x_digit_str(NUM_DIGITS_TS,'0') else '0'
         else:
-            last_seq_no = latest_leaf.event_ts_id.seq_no
-            seq_no = str(int(last_seq_no) + 1)
+            last_ts, last_seq_num = latest_leaf.event_ts_id.split('-')
+            seq_no = str(int(last_seq_num) + 1)
         return seq_no
 
     def _get_latest_leaf(self, node: _BranchNode) -> _LeafNode | None:
         """
         Get the last appended leaf in the sub-tree of node.
         """
-        if self._latest_leaf == self._first_leaf:
-            return self._latest_leaf
         while not (isinstance(node, _LeafNode) or (node is None)):
             parent = node
             for i in range(9,-1,-1):
@@ -214,10 +173,12 @@ class RedisStream:
             cur_node = cur_node.children[ch]
         return cur_node
 
-    def _validate_ts_id(self, event_ts_id: StreamTimestampId):
-        if event_ts_id <= self._first_leaf.event_ts_id :
+    def _validate_ts_id(self, ts, seq_no):
+        ts, seq_no = int(ts), int(seq_no)
+        if (ts, seq_no) <= (0,0) :
             raise InvalidStreamEventTsId("ERR The ID specified in XADD must be greater than 0-0")
-        if event_ts_id <= self._latest_leaf.event_ts_id:
+        latest_ts, latest_seq_num = self._latest_leaf.event_ts_id.split('-')
+        if (int(ts), int(seq_no)) <= ( int(latest_ts), int(latest_seq_num)):
             raise InvalidStreamEventTsId("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 
     def pretty_print(self):
