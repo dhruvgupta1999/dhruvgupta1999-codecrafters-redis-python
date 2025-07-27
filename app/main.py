@@ -70,7 +70,7 @@ def create_response(msg, request_recv_time_ms):
                 stream_name = tokens[2]
                 start = tokens[3].decode()
                 result = redis_memstore[stream_name].val.xread(start)
-                return serialize_msg(result, SerializedTypes.ARRAY)
+                return serialize_msg([stream_name,result], SerializedTypes.ARRAY)
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
     else:
