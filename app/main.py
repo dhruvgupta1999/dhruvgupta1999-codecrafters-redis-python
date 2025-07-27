@@ -58,7 +58,7 @@ def create_response(msg, request_recv_time_ms):
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
                 event_ts_id = StreamTimestampId(event_ts_id)
                 try:
-                    append_stream_event(stream_name, event_ts_id, val_dict)
+                    event_ts_id = append_stream_event(stream_name, event_ts_id, val_dict)
                 except InvalidStreamEventTsId as e:
                     return serialize_msg(str(e), SerializedTypes.ERROR)
                 pretty_print_stream(stream_name)

@@ -34,8 +34,9 @@ def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
 def append_stream_event(stream_name:bytes, event_ts_id:StreamTimestampId, val_dict):
     if stream_name not in redis_memstore:
         redis_memstore[stream_name] = ValueObj(val=RedisStream(), unix_expiry_ms=NO_EXPIRY, val_dtype=ValueTypes.STREAM)
-    redis_memstore[stream_name].val.append(event_ts_id, val_dict)
+    event_ts_id = redis_memstore[stream_name].val.append(event_ts_id, val_dict)
     print(f"Appended {stream_name=} {event_ts_id=}:\n {val_dict}")
+    return event_ts_id
 
 
 def pretty_print_stream(stream_name):

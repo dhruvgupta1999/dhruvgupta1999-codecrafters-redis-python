@@ -190,7 +190,9 @@ class RedisStream:
         """
         Get the last appended leaf in the sub-tree of node.
         """
-        while not (isinstance(node, _LeafNode) or node is None):
+        if self._latest_leaf == self._first_leaf:
+            return self._latest_leaf
+        while not (isinstance(node, _LeafNode) or (node is None)):
             for i in range(9,-1,-1):
                 if str(i) in node.children:
                     node = node.children[str(i)]
