@@ -175,6 +175,7 @@ class RedisStream:
         new_latest_leaf = cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
         self._latest_leaf.next_leaf = new_latest_leaf
         self._latest_leaf = new_latest_leaf
+        return event_ts_id
 
     def _get_next_seq_no(self, ts):
         cur_node = self._get_branch_node_with_prefix_event_ts(ts)
