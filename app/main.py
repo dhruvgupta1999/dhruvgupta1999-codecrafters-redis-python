@@ -52,6 +52,7 @@ def create_response(msg, request_recv_time_ms):
             case b'XADD':
                 stream_name = tokens[1]
                 event_ts_id = tokens[2]
+                print(f"XADD {stream_name=} {event_ts_id=}")
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
                 append_event(stream_name, event_ts_id, val_dict)
                 pretty_print_stream(stream_name)

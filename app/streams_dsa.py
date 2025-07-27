@@ -97,7 +97,7 @@ class RedisStream:
         branch2->3 = branch3
         branch3->1 = leafnode
         """
-
+        print(f"appending {event_ts_id=}")
         internal_event_ts_id = self.get_internal_event_ts_id(event_ts_id)
         cur_node = self._root
         for ch in internal_event_ts_id[:-1]:
@@ -111,7 +111,7 @@ class RedisStream:
         cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
         self._latest_leaf.next_leaf = cur_node.children[last_ch]
 
-    def get_internal_event_ts_id(self, event_ts_id: bytes):
+    def get_internal_event_ts_id(self, event_ts_id: bytes) -> str:
         event_ts_id_str = event_ts_id.decode()
         ts_ms, seq_no = '-'.split(event_ts_id_str)
         ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
