@@ -15,6 +15,8 @@ class ValueTypes(Enum):
     def get_type(cls, val):
         if isinstance(val, str) or isinstance(val, bytes):
             return cls.STRING
+        if isinstance(val, dict):
+            return cls.STREAM
         raise NotImplementedError()
 
     def get_serialized_dtype(self):

@@ -5,7 +5,7 @@ import time
 
 
 
-from app.memory_management import redis_memstore, get_from_memstore
+from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, typecast_as_int
 
@@ -42,19 +42,21 @@ def create_response(msg, request_recv_time_ms):
                 return result
             case b'SET':
                 key, val= tokens[1], tokens[2]
+                time_to_live_ms = None
                 if len(tokens) > 4:
                     time_to_live_ms = typecast_as_int(tokens[4])
-                    expiry_time_ms = request_recv_time_ms + time_to_live_ms
-                else:
-                    expiry_time_ms = NO_EXPIRY
-
-                val_type = ValueTypes.get_type(val)
-                redis_memstore[key] = ValueObj(val=val, val_dtype=val_type, unix_expiry_ms=expiry_time_ms)
+                set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms)
                 return OK_SIMPLE_STRING
             case b'TYPE':
                 key = tokens[1]
                 value_obj = get_from_memstore(key, request_recv_time_ms)
                 return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
+            case b'XADD':
+                stream_key = b''
+                if tokens[1] == b'stream_key':
+                    stream_key = tokens[2]
+                val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
+                set_to_memstore(request_recv_time_ms, stream_key, val_dict, None)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
