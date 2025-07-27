@@ -61,6 +61,11 @@ def create_response(msg, request_recv_time_ms):
                     return serialize_msg(str(e), SerializedTypes.ERROR)
                 pretty_print_stream(stream_name)
                 return serialize_msg(event_ts_id, SerializedTypes.BULK_STRING)
+            case b'XRANGE':
+                stream_name = tokens[1]
+                start, end = tokens[2].decode(), tokens[3].decode()
+                result = redis_memstore[stream_name].xrange(start, end)
+                return serialize_msg(result, SerializedTypes.ARRAY)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)

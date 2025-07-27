@@ -164,7 +164,7 @@ class RedisStream:
                 return None
         return node
 
-    def xrange(self, start, end):
+    def xrange(self, start: str, end: str):
         """
         inclusive on start and end
         """

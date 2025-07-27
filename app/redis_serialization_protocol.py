@@ -107,7 +107,7 @@ def typecast_as_bytes(msg) -> bytes:
     if isinstance(msg, str):
         return msg.encode()
 
-def serialize_msg(msg: int|bytes|str, data_type: SerializedTypes):
+def serialize_msg(msg: int|bytes|str|list, data_type: SerializedTypes):
     match data_type:
         case SerializedTypes.SIMPLE_STRING:
             msg = typecast_as_bytes(msg)
@@ -123,7 +123,13 @@ def serialize_msg(msg: int|bytes|str, data_type: SerializedTypes):
             msg = typecast_as_bytes(msg)
             return SerializedTypes.ERROR.value + msg + CLRS
         case SerializedTypes.ARRAY:
-            raise NotImplementedError()
+            serialized = SerializedTypes.ARRAY.value + str(len(msg)).encode() + CLRS
+            for e in msg:
+                if isinstance(e, str|bytes|int):
+                    serialized += serialize_msg(e, SerializedTypes.BULK_STRING)
+                else:
+                    serialized += serialize_msg(e, SerializedTypes.ARRAY)
+            return serialized
         case _:
             raise ValueError(f"Unsupported data type: {data_type}")
 
