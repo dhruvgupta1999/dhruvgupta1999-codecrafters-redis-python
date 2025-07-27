@@ -74,15 +74,29 @@ class StreamTimestampId:
     def as_bytes(self):
         return self._val
 
-    def as_stream_internal_ts_id(self):
-        ts_ms, seq_no = self._timestamp_and_seq_no()
-        internal_event_ts_id = ts_ms + seq_no
-        return internal_event_ts_id
+    @property
+    def timestamp(self) -> str:
+        """
+        time in ms
+        """
+        event_ts_id_str = self._val.decode()
+        ts_ms, seq_no = event_ts_id_str.split('-')
+        return ts_ms
+
+    @property
+    def seq_no(self) -> str:
+        event_ts_id_str = self._val.decode()
+        ts_ms, seq_no = event_ts_id_str.split('-')
+        return seq_no
 
     def __eq__(self, other: Self):
+        if '*' in (self.timestamp, self.seq_no, other.timestamp, other.seq_no):
+            raise ValueError(f"Can't compare due to '*' {self=} {other=}")
         return self._timestamp_and_seq_no() == other._timestamp_and_seq_no()
 
     def __gt__(self, other):
+        if '*' in (self.timestamp, self.seq_no, other.timestamp, other.seq_no):
+            raise ValueError(f"Can't compare due to '*' {self=} {other=}")
         # Do tuple comparison
         return self._timestamp_and_seq_no() > other._timestamp_and_seq_no()
 
@@ -142,13 +156,16 @@ class RedisStream:
         branch2->3 = branch3
         branch3->1 = leafnode
         """
-        self.validate_ts_id(event_ts_id)
-        internal_event_ts_id = event_ts_id.as_stream_internal_ts_id()
-        cur_node = self._root
-        for ch in internal_event_ts_id[:-1]:
-            if ch not in cur_node.children:
-                cur_node.children[ch] = _BranchNode()
-            cur_node = cur_node.children[ch]
+        self._validate_ts_id(event_ts_id)
+        ts, seq_no = event_ts_id.timestamp, event_ts_id.seq_no
+        if ts == '*':
+            raise NotImplementedError()
+        if seq_no == '*':
+            seq_no = self._get_next_seq_no(ts)
+
+        internal_event_ts_id = as_x_digit_str(NUM_DIGITS_TS, ts) + as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
+        print(f"internal event ts id: {internal_event_ts_id}")
+        cur_node = self._get_branch_node_with_prefix_event_ts(internal_event_ts_id[:-1])
         # Last character maps to a leaf node.
         last_ch = internal_event_ts_id[-1]
         if last_ch in cur_node.children:
@@ -157,10 +174,36 @@ class RedisStream:
         self._latest_leaf.next_leaf = new_latest_leaf
         self._latest_leaf = new_latest_leaf
 
-    def validate_ts_id(self, event_ts_id: StreamTimestampId):
-        print("In validate ts id")
-        print(f"{event_ts_id=}")
-        print(f"latest ts id: {self._latest_leaf.event_ts_id}")
+    def _get_next_seq_no(self, ts):
+        cur_node = self._get_branch_node_with_prefix_event_ts(ts)
+        latest_leaf = self._get_latest_leaf(cur_node)
+        if not latest_leaf:
+            seq_no = '1' if ts == '0' else '0'
+        else:
+            last_seq_no = latest_leaf.event_ts_id.seq_no
+            seq_no = str(int(last_seq_no) + 1)
+        return seq_no
+
+    def _get_latest_leaf(self, node: _BranchNode) -> _LeafNode | None:
+        """
+        Get the last appended leaf in the sub-tree of node.
+        """
+        while not (isinstance(node, _LeafNode) or node is None):
+            for i in range(9,-1,-1):
+                if str(i) in node.children:
+                    node = node.children[str(i)]
+                    break
+        return node
+
+    def _get_branch_node_with_prefix_event_ts(self, prefix_event_ts_id):
+        cur_node = self._root
+        for ch in prefix_event_ts_id:
+            if ch not in cur_node.children:
+                cur_node.children[ch] = _BranchNode()
+            cur_node = cur_node.children[ch]
+        return cur_node
+
+    def _validate_ts_id(self, event_ts_id: StreamTimestampId):
         if event_ts_id <= self._first_leaf.event_ts_id :
             raise InvalidStreamEventTsId("ERR The ID specified in XADD must be greater than 0-0")
         if event_ts_id <= self._latest_leaf.event_ts_id:
