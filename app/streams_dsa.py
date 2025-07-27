@@ -168,18 +168,25 @@ class RedisStream:
         """
         inclusive on start and end
         """
+        if self._latest_leaf is None:
+            return []
         result = []
+        if start == '-':
+            start = '0'
         if '-' in start:
             start_trie_key = _get_trie_key(start)
         else:
             # If only ts part is there, then assume seq_num as '0'
             start_trie_key = _get_trie_key(start+'-0')
 
-        if '-' in end:
-            end_trie_key = _get_trie_key(end)
+        if end == '+':
+            end_trie_key = _get_trie_key(self._latest_leaf.event_ts_id)
         else:
-            # Till last seq_num in the end.
-            end_trie_key = _get_trie_key(end+'-99')
+            if '-' in end:
+                end_trie_key = _get_trie_key(end)
+            else:
+                # Till last seq_num in the end.
+                end_trie_key = _get_trie_key(end+'-99')
 
         first_leaf = self._get_first_leaf_after(start_trie_key)
         if not first_leaf:
