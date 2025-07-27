@@ -153,8 +153,9 @@ class RedisStream:
         last_ch = internal_event_ts_id[-1]
         if last_ch in cur_node.children:
             raise ValueError(f"{event_ts_id=} already exists:", cur_node.children[last_ch])
-        cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
-        self._latest_leaf.next_leaf = cur_node.children[last_ch]
+        new_latest_leaf = cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
+        self._latest_leaf.next_leaf = new_latest_leaf
+        self._latest_leaf = new_latest_leaf
 
     def validate_ts_id(self, event_ts_id: StreamTimestampId):
         print("In validate ts id")
