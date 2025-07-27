@@ -113,7 +113,7 @@ class RedisStream:
 
     def get_internal_event_ts_id(self, event_ts_id: bytes) -> str:
         event_ts_id_str = event_ts_id.decode()
-        ts_ms, seq_no = '-'.split(event_ts_id_str)
+        ts_ms, seq_no = event_ts_id_str.split('-')
         ts_ms = as_x_digit_str(NUM_DIGITS_TS, ts_ms)
         seq_no = as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
         internal_event_ts_id = ts_ms + seq_no
