@@ -77,6 +77,18 @@ def get_unix_time_ms():
     unix_ts_ms = int(unix_timestamp * 1000)
     return unix_ts_ms
 
+def _get_trie_key(event_ts_id):
+    ts_str, seq_num_str = event_ts_id.split('-')
+    trie_key = as_x_digit_str(NUM_DIGITS_TS, ts_str) + as_x_digit_str(NUM_DIGITS_SEQ, seq_num_str)
+    return trie_key
+
+def _get_leaf_val_as_array(leaf_node):
+    vals = []
+    for key, val in leaf_node.val.items():
+        vals.extend([key, val])
+    sub_result = [leaf_node.event_ts_id, vals]
+    return sub_result
+
 ####################################################################################################
 
 
@@ -104,8 +116,7 @@ class RedisStream:
 
     def __init__(self):
         self._root = _BranchNode()
-        self._first_leaf = _LeafNode(event_ts_id='0-0', val=None, prev_leaf=None, next_leaf=None)
-        self._latest_leaf: _LeafNode = self._first_leaf
+        self._latest_leaf: _LeafNode = None
 
     def append(self, event_ts_id: str, val_dict) -> str:
         """
@@ -118,25 +129,72 @@ class RedisStream:
         branch2->3 = branch3
         branch3->1 = leafnode
         """
-        event_ts_id = self.resolve_event_ts_id(event_ts_id)
+        event_ts_id = self._resolve_event_ts_id(event_ts_id)
         ts_str, seq_num_str = event_ts_id.split('-')
 
-        trie_key_ts_part = as_x_digit_str(NUM_DIGITS_TS, ts_str)
         self._validate_ts_id(ts_str, seq_num_str)
-        trie_key_seq_num_part = as_x_digit_str(NUM_DIGITS_SEQ, seq_num_str)
-        trie_key = trie_key_ts_part + trie_key_seq_num_part
+        trie_key = _get_trie_key(event_ts_id)
         print(f"trie key: {trie_key}")
-        cur_node = self._get_branch_node_with_prefix_event_ts(trie_key[:-1])
+        cur_node = self._get_branch_node_with_prefix(trie_key[:-1])
         # Last character maps to a leaf node.
         last_ch = trie_key[-1]
         if last_ch in cur_node.children:
             raise ValueError(f"{event_ts_id=} already exists:", cur_node.children[last_ch])
         new_latest_leaf = cur_node.children[last_ch] = _LeafNode(event_ts_id=event_ts_id, val=val_dict, prev_leaf=self._latest_leaf, next_leaf=None)
-        self._latest_leaf.next_leaf = new_latest_leaf
+        if self._latest_leaf:
+            self._latest_leaf.next_leaf = new_latest_leaf
         self._latest_leaf = new_latest_leaf
         return f"{ts_str}-{seq_num_str}"
 
-    def resolve_event_ts_id(self, event_ts_id):
+    def _get_first_leaf_after(self, trie_key) -> _LeafNode | None:
+        """
+        Find first leaf with trie_key >= input trie key
+        """
+        index = 0
+        node = self._root
+        while not (isinstance(node, _LeafNode) or (node is None)):
+            parent = node
+            digit = int(trie_key[index])
+            for i in range(digit,10):
+                if str(i) in node.children:
+                    node = node.children[str(i)]
+                    break
+            index += 1
+            if node == parent:
+                return None
+        return node
+
+    def xrange(self, start, end):
+        """
+        inclusive on start and end
+        """
+        result = []
+        if '-' in start:
+            start_trie_key = _get_trie_key(start)
+        else:
+            # If only ts part is there, then assume seq_num as '0'
+            start_trie_key = _get_trie_key(start+'-0')
+
+        if '-' in end:
+            end_trie_key = _get_trie_key(end)
+        else:
+            # Till last seq_num in the end.
+            end_trie_key = _get_trie_key(end+'-99')
+
+        first_leaf = self._get_first_leaf_after(start_trie_key)
+        if not first_leaf:
+            return result
+
+        leaf = first_leaf
+        while leaf and _get_trie_key(leaf.event_ts_id) <= end_trie_key:
+            sub_result = _get_leaf_val_as_array(leaf)
+            result.append(sub_result)
+            leaf = leaf.next_leaf
+
+        return result
+
+
+    def _resolve_event_ts_id(self, event_ts_id):
         if event_ts_id == '*':
             ts_str = str(get_unix_time_ms())
             seq_num_str = '*'
@@ -148,7 +206,7 @@ class RedisStream:
         return ts_str + '-' +  seq_num_str
 
     def _get_next_seq_no(self, trie_key_ts_part):
-        cur_node = self._get_branch_node_with_prefix_event_ts(trie_key_ts_part)
+        cur_node = self._get_branch_node_with_prefix(trie_key_ts_part)
         latest_leaf = self._get_latest_leaf(cur_node)
         if latest_leaf is None:
             seq_no = '1' if trie_key_ts_part == as_x_digit_str(NUM_DIGITS_TS,'0') else '0'
@@ -171,12 +229,14 @@ class RedisStream:
                 return None
         return node
 
-    def _get_branch_node_with_prefix_event_ts(self, prefix_event_ts_id):
+    def _get_branch_node_with_prefix(self, trie_key_prefix):
         """
         If the branch doesn't exist, create it. (MAY have to change this later).
         """
+        # We don't want to reach leaf node.
+        assert len(trie_key_prefix) < NUM_DIGITS_TS + NUM_DIGITS_SEQ
         cur_node = self._root
-        for ch in prefix_event_ts_id:
+        for ch in trie_key_prefix:
             if ch not in cur_node.children:
                 cur_node.children[ch] = _BranchNode()
             cur_node = cur_node.children[ch]
@@ -186,15 +246,17 @@ class RedisStream:
         ts, seq_no = int(ts), int(seq_no)
         if (ts, seq_no) <= (0,0) :
             raise InvalidStreamEventTsId("ERR The ID specified in XADD must be greater than 0-0")
+        if not self._latest_leaf:
+            return
         latest_ts, latest_seq_num = self._latest_leaf.event_ts_id.split('-')
         if (int(ts), int(seq_no)) <= ( int(latest_ts), int(latest_seq_num)):
             raise InvalidStreamEventTsId("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 
     def pretty_print(self):
         print("Here is the redis stream")
-        cur_leaf = self._first_leaf.next_leaf
+        cur_leaf = self._latest_leaf
         if not cur_leaf:
             print("Stream is empty right now.")
         while cur_leaf:
             print(cur_leaf.event_ts_id, cur_leaf.val)
-            cur_leaf = cur_leaf.next_leaf
+            cur_leaf = cur_leaf.prev_leaf
