@@ -137,9 +137,11 @@ class RedisStream:
         return f"{ts_str}-{seq_num_str}"
 
     def resolve_event_ts_id(self, event_ts_id):
-        ts_str, seq_num_str = event_ts_id.split('-')
-        if ts_str == '*':
+        if event_ts_id == '*':
             ts_str = str(get_unix_time_ms())
+            seq_num_str = '*'
+        else:
+            ts_str, seq_num_str = event_ts_id.split('-')
         trie_key_ts_part = as_x_digit_str(NUM_DIGITS_TS, ts_str)
         if seq_num_str == '*':
             seq_num_str = self._get_next_seq_no(trie_key_ts_part)
