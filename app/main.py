@@ -3,7 +3,7 @@ import asyncio
 from typing import Iterable
 import time
 
-from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_event
+from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_event, pretty_print_stream
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, typecast_as_int
 
@@ -54,6 +54,7 @@ def create_response(msg, request_recv_time_ms):
                 event_ts_id = tokens[2]
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
                 append_event(stream_name, event_ts_id, val_dict)
+                pretty_print_stream(stream_name)
                 return serialize_msg(event_ts_id, SerializedTypes.BULK_STRING)
 
             case _:
