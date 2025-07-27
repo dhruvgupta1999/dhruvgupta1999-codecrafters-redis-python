@@ -200,6 +200,33 @@ class RedisStream:
 
         return result
 
+    def xread(self, start):
+        """
+        start exclusive
+        """
+        result = []
+        if '-' in start:
+            start_trie_key = _get_trie_key(start)
+        else:
+            # If only ts part is there, then assume seq_num as '0'
+            start_trie_key = _get_trie_key(start+'-0')
+
+        first_leaf = self._get_first_leaf_after(start_trie_key)
+        if not first_leaf:
+            return result
+
+        # start is exclusive in xread
+        if _get_trie_key(first_leaf.event_ts_id) == _get_trie_key(start):
+            first_leaf = first_leaf.next_leaf
+
+        leaf = first_leaf
+        while leaf:
+            sub_result = _get_leaf_val_as_array(leaf)
+            result.append(sub_result)
+            leaf = leaf.next_leaf
+
+        return result
+
 
     def _resolve_event_ts_id(self, event_ts_id):
         if event_ts_id == '*':
