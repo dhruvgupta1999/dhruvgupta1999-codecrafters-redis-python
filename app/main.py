@@ -70,7 +70,7 @@ def create_response(msg, request_recv_time_ms):
                 streams = []
                 starts = []
                 for tok in tokens[2:]:
-                    if '-' in tok:
+                    if b'-' in tok:
                         break
                     streams.append(tok)
                 for tok in tokens[2+len(streams):]:
