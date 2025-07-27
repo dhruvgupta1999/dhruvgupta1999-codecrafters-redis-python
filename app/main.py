@@ -67,10 +67,20 @@ def create_response(msg, request_recv_time_ms):
                 result = redis_memstore[stream_name].val.xrange(start, end)
                 return serialize_msg(result, SerializedTypes.ARRAY)
             case b'XREAD':
-                stream_name = tokens[2]
-                start = tokens[3].decode()
-                result = redis_memstore[stream_name].val.xread(start)
-                return serialize_msg([[stream_name,result]], SerializedTypes.ARRAY)
+                streams = []
+                starts = []
+                for tok in tokens[2:]:
+                    if '-' in tok:
+                        break
+                    streams.append(tok)
+                for tok in tokens[2+len(streams):]:
+                    starts.append(tok.decode())
+
+                results = []
+                for stream, start in zip(streams, starts):
+                    result = redis_memstore[stream].val.xread(start)
+                    results.append([stream, result])
+                return serialize_msg(results, SerializedTypes.ARRAY)
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
     else:
