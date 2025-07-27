@@ -156,12 +156,14 @@ class RedisStream:
         branch2->3 = branch3
         branch3->1 = leafnode
         """
-        self._validate_ts_id(event_ts_id)
+
         ts, seq_no = event_ts_id.timestamp, event_ts_id.seq_no
         if ts == '*':
             raise NotImplementedError()
         if seq_no == '*':
             seq_no = self._get_next_seq_no(ts)
+
+        event_ts_id = StreamTimestampId(f"{ts}-{seq_no}".encode())
 
         internal_event_ts_id = as_x_digit_str(NUM_DIGITS_TS, ts) + as_x_digit_str(NUM_DIGITS_SEQ, seq_no)
         print(f"internal event ts id: {internal_event_ts_id}")
