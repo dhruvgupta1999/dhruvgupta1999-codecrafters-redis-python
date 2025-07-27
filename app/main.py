@@ -57,6 +57,7 @@ def create_response(msg, request_recv_time_ms):
                     stream_key = tokens[2]
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
                 set_to_memstore(request_recv_time_ms, stream_key, val_dict, None)
+                return serialize_msg(stream_key, SerializedTypes.BULK_STRING)
 
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
