@@ -5,7 +5,7 @@ import time
 
 from app.errors import InvalidStreamEventTsId
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
-    pretty_print_stream, run_xread
+    pretty_print_stream, run_xread, incr_in_memstore
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, \
     typecast_as_int, NULL_BULK_STRING
@@ -70,6 +70,9 @@ async def create_response(msg, request_recv_time_ms):
             case b'ECHO':
                 result = b' '.join(tokens[1:])
                 result = serialize_msg(result, SerializedTypes.BULK_STRING)
+
+            # Redis cache
+
             case b'GET':
                 key = tokens[1]
                 value_obj = get_from_memstore(key, request_recv_time_ms)
@@ -87,6 +90,16 @@ async def create_response(msg, request_recv_time_ms):
                 key = tokens[1]
                 value_obj = get_from_memstore(key, request_recv_time_ms)
                 return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
+            case b'INCR':
+                key = tokens[1]
+                num = incr_in_memstore(key)
+                result = serialize_msg(num, SerializedTypes.INTEGER)
+                print("INCR result:", result)
+                return result
+
+
+            # Redis Streams
+
             case b'XADD':
                 stream_name = tokens[1]
                 event_ts_id = tokens[2].decode()
@@ -111,6 +124,7 @@ async def create_response(msg, request_recv_time_ms):
                 if not found_smth:
                     return NULL_BULK_STRING
                 return serialize_msg(results, SerializedTypes.ARRAY)
+
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
     else:

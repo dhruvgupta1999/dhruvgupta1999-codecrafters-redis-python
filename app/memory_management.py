@@ -30,6 +30,18 @@ def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
     redis_memstore[key] = ValueObj(val=val, val_dtype=val_type, unix_expiry_ms=expiry_time_ms)
 
 
+# Increment
+
+def incr_in_memstore(key) -> int:
+    value_obj = redis_memstore.get(key, NULL_VALUE_OBJ)
+    if value_obj == NULL_VALUE_OBJ:
+        raise NotImplementedError("incr on null!")
+
+    # right now I am storing everything as string internally!
+    value_obj.val = str(int(value_obj.val) + 1)
+    return int(value_obj.val)
+
+
 # Streams
 
 async def append_stream_event(stream_name:bytes, event_ts_id:str, val_dict, xadd_conditions: dict[bytes,asyncio.Condition]):
