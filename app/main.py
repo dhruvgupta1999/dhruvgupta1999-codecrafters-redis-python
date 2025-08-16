@@ -4,11 +4,17 @@ from typing import Iterable
 import time
 
 from app.errors import InvalidStreamEventTsId
-from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, pretty_print_stream
+from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
+    pretty_print_stream, run_xread
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
-from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, typecast_as_int
+from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, \
+    typecast_as_int, NULL_BULK_STRING
 
 MAX_MSG_LEN = 1000
+
+# This is to wait for xadd by calls like xread.
+# Each stream has an asyncio.Condition() to keep track of new xadds.
+xadd_conditions: dict[bytes,asyncio.Condition] = {}
 
 
 def get_unix_time_ms():
@@ -17,7 +23,38 @@ def get_unix_time_ms():
     unix_ts_ms = int(unix_timestamp * 1000)
     return unix_ts_ms
 
-def create_response(msg, request_recv_time_ms):
+
+
+def parse_xread_input(tokens):
+    """
+    normal read:
+    redis-cli XREAD streams some_key 1526985054069-0
+
+    some_key -> stream name
+    1526985054069-0 -> event id  (timestamp and seq_no)
+
+
+    blocking read:
+    redis-cli XREAD block 1000 streams some_key 1526985054069-0
+    """
+    stream_start_idx = 2
+    block_ms = None
+    if tokens[1] == b'block':
+        block_ms = int(tokens[2].decode())
+        stream_start_idx = 4
+    # Collects stream names and the start_event_ts_id for each.
+    streams = []
+    starts = []
+    for tok in tokens[stream_start_idx:]:
+        if b'-' in tok:
+            break
+        streams.append(tok)
+    for tok in tokens[stream_start_idx + len(streams):]:
+        starts.append(tok.decode())
+    return block_ms, starts, streams
+
+
+async def create_response(msg, request_recv_time_ms):
     """
     create a response and return the redis protocol serialized version of it.
 
@@ -56,7 +93,7 @@ def create_response(msg, request_recv_time_ms):
                 print(f"XADD {stream_name=} {event_ts_id=}")
                 val_dict = {tokens[i]:tokens[i+1] for i in range(3,len(tokens),2)}
                 try:
-                    event_ts_id = append_stream_event(stream_name, event_ts_id, val_dict)
+                    event_ts_id = await append_stream_event(stream_name, event_ts_id, val_dict, xadd_conditions)
                 except InvalidStreamEventTsId as e:
                     return serialize_msg(str(e), SerializedTypes.ERROR)
                 pretty_print_stream(stream_name)
@@ -67,19 +104,12 @@ def create_response(msg, request_recv_time_ms):
                 result = redis_memstore[stream_name].val.xrange(start, end)
                 return serialize_msg(result, SerializedTypes.ARRAY)
             case b'XREAD':
-                streams = []
-                starts = []
-                for tok in tokens[2:]:
-                    if b'-' in tok:
-                        break
-                    streams.append(tok)
-                for tok in tokens[2+len(streams):]:
-                    starts.append(tok.decode())
-
-                results = []
-                for stream, start in zip(streams, starts):
-                    result = redis_memstore[stream].val.xread(start)
-                    results.append([stream, result])
+                block_ms, starts, streams = parse_xread_input(tokens)
+                print(f"{block_ms=}")
+                # Query the memstore
+                found_smth, results = await run_xread(starts, streams, xadd_conditions, block_ms)
+                if not found_smth:
+                    return NULL_BULK_STRING
                 return serialize_msg(results, SerializedTypes.ARRAY)
             case _:
                 result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
@@ -109,7 +139,8 @@ async def handle_client(reader, writer):
         err_flag, message = parse_redis_bytes(data)
         print(f"Parsed data: {message}")
 
-        writer.write(create_response(message, request_recv_time))
+        response = await create_response(message, request_recv_time)
+        writer.write(response)
         await writer.drain()
 
     writer.close()

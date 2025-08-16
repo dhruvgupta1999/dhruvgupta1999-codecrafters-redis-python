@@ -202,6 +202,8 @@ class RedisStream:
 
     def xread(self, start):
         """
+        Check if anything came in the stream after <start>.
+
         start exclusive
         """
         result = []
