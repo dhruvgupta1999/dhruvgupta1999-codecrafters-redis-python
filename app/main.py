@@ -3,7 +3,7 @@ import asyncio
 from typing import Iterable
 import time
 
-from app.errors import InvalidStreamEventTsId
+from app.errors import InvalidStreamEventTsId, IncrOnStringValue
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
     pretty_print_stream, run_xread, incr_in_memstore
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
@@ -92,7 +92,10 @@ async def create_response(msg, request_recv_time_ms):
                 return serialize_msg(value_obj.val_dtype.value, SerializedTypes.SIMPLE_STRING)
             case b'INCR':
                 key = tokens[1]
-                num = incr_in_memstore(key)
+                try:
+                    num = incr_in_memstore(key)
+                except IncrOnStringValue as e:
+                    return serialize_msg(str(e), SerializedTypes.ERROR)
                 result = serialize_msg(num, SerializedTypes.INTEGER)
                 print("INCR result:", result)
                 return result

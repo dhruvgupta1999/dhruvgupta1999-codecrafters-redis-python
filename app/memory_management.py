@@ -4,6 +4,7 @@ Logic to manage the memory.
 import asyncio
 from collections import defaultdict
 
+from app.errors import IncrOnStringValue
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.streams_dsa import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ
 
@@ -40,7 +41,12 @@ def incr_in_memstore(key) -> int:
         return 1
 
     # right now I am storing everything as string internally!
-    value_obj.val = str(int(value_obj.val) + 1)
+    try:
+        value_obj.val = str(int(value_obj.val) + 1)
+    except ValueError as v:
+        print(f"INCR on bad value {value_obj}")
+        raise IncrOnStringValue(f"ERR value is not an integer or out of range")
+
     return int(value_obj.val)
 
 
