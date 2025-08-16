@@ -20,7 +20,7 @@ def get_from_memstore(key:bytes, request_recv_time_ms):
         value_obj = NULL_VALUE_OBJ
     return value_obj
 
-def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
+def set_to_memstore(key, val, request_recv_time_ms=None, time_to_live_ms=None):
     if time_to_live_ms is not None:
         expiry_time_ms = request_recv_time_ms + time_to_live_ms
     else:
@@ -35,7 +35,9 @@ def set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms=None):
 def incr_in_memstore(key) -> int:
     value_obj = redis_memstore.get(key, NULL_VALUE_OBJ)
     if value_obj == NULL_VALUE_OBJ:
-        raise NotImplementedError("incr on null!")
+        # If not exists, set as 1
+        set_to_memstore(key, '1')
+        return 1
 
     # right now I am storing everything as string internally!
     value_obj.val = str(int(value_obj.val) + 1)

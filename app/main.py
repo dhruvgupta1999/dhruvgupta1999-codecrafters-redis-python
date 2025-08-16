@@ -84,7 +84,7 @@ async def create_response(msg, request_recv_time_ms):
                 time_to_live_ms = None
                 if len(tokens) > 4:
                     time_to_live_ms = typecast_as_int(tokens[4])
-                set_to_memstore(request_recv_time_ms, key, val, time_to_live_ms)
+                set_to_memstore(key, val, request_recv_time_ms, time_to_live_ms)
                 return OK_SIMPLE_STRING
             case b'TYPE':
                 key = tokens[1]
