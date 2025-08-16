@@ -54,7 +54,8 @@ async def run_xread(starts, streams, xadd_conditions: dict[bytes,asyncio.Conditi
     # 1. first check if something is already present.
     found_smth, results = xread_stream_storage(starts, streams)
 
-    if found_smth:
+    # If timeout is not set, it's non-blocking.
+    if found_smth or timeout_ms is None:
         return found_smth, results
 
 
@@ -73,7 +74,11 @@ async def run_xread(starts, streams, xadd_conditions: dict[bytes,asyncio.Conditi
 
         wait_tasks.append(asyncio.create_task(wait_on()))
 
-    done, pending = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=timeout_ms/1000)
+    if timeout_ms == 0:
+        # Then keep blocking till some input is received. (no timeout).
+        done, pending = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
+    else:
+        done, pending = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=timeout_ms/1000)
 
     if not done:
         return False, []
