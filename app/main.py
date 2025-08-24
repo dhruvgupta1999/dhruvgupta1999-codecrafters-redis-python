@@ -166,7 +166,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
         # Redis Replication
         case b'INFO':
             # Return whether I am a master or slave
-            return serialize_msg(f"role:{replica_meta.role}",  SerializedTypes.BULK_STRING)
+            return serialize_msg(f"role:{replica_meta.role.value}",  SerializedTypes.BULK_STRING)
 
 
         case _:
