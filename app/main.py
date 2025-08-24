@@ -191,6 +191,10 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
                 return serialize_msg(f"{addr} is already in transaction mode!!", SerializedTypes.ERROR)
             TRANSACTION.clients_in_transaction_mode.add(addr)
             return OK_SIMPLE_STRING
+        case b'EXEC':
+            # This is only possible if MULTI hasn't been called yet...
+            # Return error
+            return serialize_msg("ERR EXEC without MULTI", SerializedTypes.ERROR)
 
 
         case _:
