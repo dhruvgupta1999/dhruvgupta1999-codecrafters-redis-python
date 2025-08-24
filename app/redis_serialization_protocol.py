@@ -76,6 +76,8 @@ def parse_primitive(msg, start_index):
 def parse_redis_bytes(msg) -> tuple[bool, Any]:
     """
     return is_error, msg
+
+    is_error => if type of message is ERROR
     """
     index = 0
     n = len(msg)
@@ -133,3 +135,14 @@ def serialize_msg(msg: int|bytes|str|list, data_type: SerializedTypes):
         case _:
             raise ValueError(f"Unsupported data type: {data_type}")
 
+
+
+def get_resp_array_from_elems(elems):
+    """
+    In case the elements are already serialized, but we want to join them as RESP array.
+
+    """
+    serialized = SerializedTypes.ARRAY.value + str(len(elems)).encode() + CLRS
+    for e in elems:
+        serialized += e
+    return serialized
