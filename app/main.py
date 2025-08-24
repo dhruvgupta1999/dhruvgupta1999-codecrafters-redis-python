@@ -111,6 +111,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             return get_resp_array_from_elems(result)
         if first_token == b'DISCARD':
             TRANSACTION.discard_transaction(addr)
+            return OK_SIMPLE_STRING
 
         TRANSACTION.commands_in_q[addr].append(msg)
         return serialize_msg('QUEUED', SerializedTypes.SIMPLE_STRING)
@@ -191,6 +192,9 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             # This is only possible if MULTI hasn't been called yet...
             # Return error
             return serialize_msg("ERR EXEC without MULTI", SerializedTypes.ERROR)
+        case b'DISCARD':
+            # This is only possibel is MULTI hasn't been called yet... (because transaction handling is done above)
+            return serialize_msg("ERR DISCARD without MULTI", SerializedTypes.ERROR)
 
 
         case _:
