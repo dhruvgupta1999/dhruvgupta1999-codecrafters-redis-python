@@ -140,7 +140,6 @@ def serialize_msg(msg: int|bytes|str|list, data_type: SerializedTypes):
 def get_resp_array_from_elems(elems):
     """
     In case the elements are already serialized, but we want to join them as RESP array.
-
     """
     serialized = SerializedTypes.ARRAY.value + str(len(elems)).encode() + CLRS
     for e in elems:
