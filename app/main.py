@@ -67,7 +67,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
     # In transaction mode, we only queue the commands.
     # They are executed when EXEC is called.
     if addr in TRANSACTION.clients_in_transaction_mode:
-        return handle_command_when_in_transaction(addr, first_token, msg)
+        return await handle_command_when_in_transaction(addr, first_token, msg)
 
 
     match first_token:
