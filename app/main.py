@@ -1,5 +1,6 @@
 import socket  # noqa: F401
 import asyncio
+from collections import defaultdict
 from typing import Iterable
 import time
 
@@ -7,16 +8,20 @@ from app.errors import InvalidStreamEventTsId, IncrOnStringValue
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
     pretty_print_stream, run_xread, incr_in_memstore
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, \
-    typecast_as_int, NULL_BULK_STRING
+    typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
 
 from app.redis_streams import parse_xread_input
-from app.transaction import TRANSACTION, handle_command_when_in_transaction
+from app.transaction import Transaction
 
 MAX_MSG_LEN = 1000
+
+TRANSACTION: Transaction = Transaction(clients_in_transaction_mode=set(),
+                                       commands_in_q=defaultdict(list))
 
 # This is to wait for xadd by calls like xread.
 # Each stream has an asyncio.Condition() to keep track of new xadds.
 xadd_conditions: dict[bytes,asyncio.Condition] = {}
+
 
 def get_unix_time_ms():
     # Get the current Unix timestamp as a floating-point number
@@ -24,6 +29,23 @@ def get_unix_time_ms():
     unix_ts_ms = int(unix_timestamp * 1000)
     return unix_ts_ms
 
+
+async def handle_command_when_in_transaction(addr, first_token, msg):
+    if first_token == b'EXEC':
+        # further calls to handle_command won't be queued.
+        TRANSACTION.clients_in_transaction_mode.remove(addr)
+        result = [await handle_command(msg, addr) for msg in TRANSACTION.commands_in_q[addr]]
+
+        # Now delete the commands_in_q[addr]
+        del TRANSACTION.commands_in_q[addr]
+
+        return get_resp_array_from_elems(result)
+    if first_token == b'DISCARD':
+        TRANSACTION.discard_transaction(addr)
+        return OK_SIMPLE_STRING
+
+    TRANSACTION.commands_in_q[addr].append(msg)
+    return serialize_msg('QUEUED', SerializedTypes.SIMPLE_STRING)
 
 async def handle_command(msg, addr, request_recv_time_ms=None):
     """
@@ -200,3 +222,4 @@ def get_args():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

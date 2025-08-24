@@ -1,9 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-from app.main import handle_command
-from app.redis_serialization_protocol import get_resp_array_from_elems, OK_SIMPLE_STRING, serialize_msg, SerializedTypes
-
 
 @dataclass
 class Transaction:
@@ -25,23 +22,3 @@ class Transaction:
         return addr in self.clients_in_transaction_mode
 
 
-TRANSACTION: Transaction = Transaction(clients_in_transaction_mode=set(),
-                                       commands_in_q=defaultdict(list))
-
-
-async def handle_command_when_in_transaction(addr, first_token, msg):
-    if first_token == b'EXEC':
-        # further calls to handle_command won't be queued.
-        TRANSACTION.clients_in_transaction_mode.remove(addr)
-        result = [await handle_command(msg, addr) for msg in TRANSACTION.commands_in_q[addr]]
-
-        # Now delete the commands_in_q[addr]
-        del TRANSACTION.commands_in_q[addr]
-
-        return get_resp_array_from_elems(result)
-    if first_token == b'DISCARD':
-        TRANSACTION.discard_transaction(addr)
-        return OK_SIMPLE_STRING
-
-    TRANSACTION.commands_in_q[addr].append(msg)
-    return serialize_msg('QUEUED', SerializedTypes.SIMPLE_STRING)
