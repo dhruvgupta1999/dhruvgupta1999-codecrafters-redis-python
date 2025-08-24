@@ -3,6 +3,7 @@ import asyncio
 from collections import defaultdict
 from typing import Iterable
 import time
+import argparse
 
 from app.errors import InvalidStreamEventTsId, IncrOnStringValue
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
@@ -11,17 +12,28 @@ from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, S
     typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
 
 from app.redis_streams import parse_xread_input
+from app.replication import ReplicationMeta, ReplicationRole
 from app.transaction import Transaction
+
+
+####################################################################################################
+# GLOBALS
 
 MAX_MSG_LEN = 1000
 
 TRANSACTION: Transaction = Transaction(clients_in_transaction_mode=set(),
                                        commands_in_q=defaultdict(list))
 
+# For use by REDIS STREAM
 # This is to wait for xadd by calls like xread.
 # Each stream has an asyncio.Condition() to keep track of new xadds.
 xadd_conditions: dict[bytes,asyncio.Condition] = {}
 
+
+replica_meta: ReplicationMeta = None
+
+####################################################################################################
+# Utils
 
 def get_unix_time_ms():
     # Get the current Unix timestamp as a floating-point number
@@ -29,6 +41,8 @@ def get_unix_time_ms():
     unix_ts_ms = int(unix_timestamp * 1000)
     return unix_ts_ms
 
+####################################################################################################
+# Handle command
 
 async def handle_command_when_in_transaction(addr, first_token, msg):
     if first_token == b'EXEC':
@@ -149,11 +163,20 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             return serialize_msg("ERR DISCARD without MULTI", SerializedTypes.ERROR)
 
 
+        # Redis Replication
+        case b'INFO':
+            # Return whether I am a master or slave
+            return serialize_msg(f"role:{replica_meta.role}",  SerializedTypes.BULK_STRING)
+
+
         case _:
             result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
 
     print("response created: ", result)
     return result
+
+####################################################################################################
+# Basic Server boilerplate
 
 
 # This function will be called separately for each client
@@ -189,31 +212,47 @@ async def handle_client(reader, writer):
 
 
 async def main():
+    global replica_meta
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
     # Uncomment this to pass the first stage
     #
     args = get_args()
-    print(f"Server will run on port: {args.port}")
     if not args.port:
         args.port = 6379
+    print(f"Server will run on port: {args.port}")
+
+    if args.replicaof:
+        master_ip, master_port = args.replicaof.split(' ')
+        master_addr = master_ip, int(master_port)
+        replica_meta = ReplicationMeta(role=ReplicationRole.SLAVE, master_addr=master_addr)
+    else:
+        replica_meta = ReplicationMeta(role=ReplicationRole.MASTER)
+
     server = await asyncio.start_server(handle_client, host='localhost', port=args.port)
     print(len(server.sockets))
     async with server:
         await server.serve_forever()
 
 
-import argparse
-
-
 def get_args():
+    """
+    eg:
+    ./your_program.sh --port 6380 --replicaof "localhost 6379"
+    """
     parser = argparse.ArgumentParser(description="Example server app")
     parser.add_argument(
         "--port",
         type=int,
         required=False,
         help="Port number to run the server on"
+    )
+    parser.add_argument(
+        "--replicaof",
+        type=str,
+        required=False,
+        help="To make this program a replica of given master"
     )
 
     args = parser.parse_args()

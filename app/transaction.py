@@ -11,7 +11,7 @@ class Transaction:
     clients_in_transaction_mode: set[str]
 
 
-    # transaction commands queue
+    # transaction commands queue (every addr is mapped to the queued commands).
     commands_in_q: defaultdict[str,list]
 
     def discard_transaction(self, addr):
