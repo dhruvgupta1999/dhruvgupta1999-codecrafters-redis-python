@@ -103,7 +103,8 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
         if first_token == b'EXEC':
             # Execute all queued commands and reset the transaction variables.
             if addr not in TRANSACTION.commands_in_q:
-                raise ValueError("Some thing is broken!")
+                # return empty RESP array
+                return serialize_msg([], SerializedTypes.ARRAY)
 
             # further calls to handle_command won't be queued.
             TRANSACTION.clients_in_transaction_mode.remove(addr)
