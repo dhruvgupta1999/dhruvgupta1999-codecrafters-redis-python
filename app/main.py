@@ -101,11 +101,6 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
     # They are executed when EXEC is called.
     if addr in TRANSACTION.clients_in_transaction_mode:
         if first_token == b'EXEC':
-            # Execute all queued commands and reset the transaction variables.
-            if addr not in TRANSACTION.commands_in_q:
-                # return empty RESP array
-                return serialize_msg([], SerializedTypes.ARRAY)
-
             # further calls to handle_command won't be queued.
             TRANSACTION.clients_in_transaction_mode.remove(addr)
             result = [await handle_command(msg, addr) for msg in TRANSACTION.commands_in_q[addr]]
