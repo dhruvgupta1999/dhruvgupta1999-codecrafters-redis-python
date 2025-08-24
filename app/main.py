@@ -1,43 +1,18 @@
 import socket  # noqa: F401
 import asyncio
-from collections import defaultdict, namedtuple
 from typing import Iterable
 import time
 
 from app.errors import InvalidStreamEventTsId, IncrOnStringValue
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
     pretty_print_stream, run_xread, incr_in_memstore
-from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, \
-    typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
-from dataclasses import dataclass
+    typecast_as_int, NULL_BULK_STRING
+
+from app.redis_streams import parse_xread_input
+from app.transaction import TRANSACTION, handle_command_when_in_transaction
 
 MAX_MSG_LEN = 1000
-
-
-
-@dataclass
-class Transaction:
-
-    # This stores which clients are currently in transaction_mode,
-    # In transaction mode we queue commands until EXEC is called.
-    # To enter transaction mode, use the MULTI command.
-    clients_in_transaction_mode: set[str]
-
-
-    # transaction commands queue
-    commands_in_q: defaultdict[str,list]
-
-    def discard_transaction(self, addr):
-        self.clients_in_transaction_mode.remove(addr)
-        del self.commands_in_q[addr]
-
-    def is_in_transaction_mode(self, addr) -> bool:
-        return addr in self.clients_in_transaction_mode
-
-TRANSACTION: Transaction = Transaction(clients_in_transaction_mode=set(),
-                                       commands_in_q=defaultdict(list))
-
 
 # This is to wait for xadd by calls like xread.
 # Each stream has an asyncio.Condition() to keep track of new xadds.
@@ -48,36 +23,6 @@ def get_unix_time_ms():
     unix_timestamp = time.time()
     unix_ts_ms = int(unix_timestamp * 1000)
     return unix_ts_ms
-
-
-
-def parse_xread_input(tokens):
-    """
-    normal read:
-    redis-cli XREAD streams some_key 1526985054069-0
-
-    some_key -> stream name
-    1526985054069-0 -> event id  (timestamp and seq_no)
-
-
-    blocking read:
-    redis-cli XREAD block 1000 streams some_key 1526985054069-0
-    """
-    stream_start_idx = 2
-    block_ms = None
-    if tokens[1] == b'block':
-        block_ms = int(tokens[2].decode())
-        stream_start_idx = 4
-    # Collects stream names and the start_event_ts_id for each.
-    streams = []
-    starts = []
-    for tok in tokens[stream_start_idx:]:
-        if b'-' in tok:
-            break
-        streams.append(tok)
-    for tok in tokens[stream_start_idx + len(streams):]:
-        starts.append(tok.decode())
-    return block_ms, starts, streams
 
 
 async def handle_command(msg, addr, request_recv_time_ms=None):
@@ -100,22 +45,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
     # In transaction mode, we only queue the commands.
     # They are executed when EXEC is called.
     if addr in TRANSACTION.clients_in_transaction_mode:
-        if first_token == b'EXEC':
-            # further calls to handle_command won't be queued.
-            TRANSACTION.clients_in_transaction_mode.remove(addr)
-            result = [await handle_command(msg, addr) for msg in TRANSACTION.commands_in_q[addr]]
-
-            # Now delete the commands_in_q[addr]
-            del TRANSACTION.commands_in_q[addr]
-
-            return get_resp_array_from_elems(result)
-        if first_token == b'DISCARD':
-            TRANSACTION.discard_transaction(addr)
-            return OK_SIMPLE_STRING
-
-        TRANSACTION.commands_in_q[addr].append(msg)
-        return serialize_msg('QUEUED', SerializedTypes.SIMPLE_STRING)
-
+        return handle_command_when_in_transaction(addr, first_token, msg)
 
 
     match first_token:
@@ -242,10 +172,30 @@ async def main():
 
     # Uncomment this to pass the first stage
     #
-    server = await asyncio.start_server(handle_client, host='localhost', port=6379)
+    args = get_args()
+    print(f"Server will run on port: {args.port}")
+    if not args.port:
+        args.port = 6379
+    server = await asyncio.start_server(handle_client, host='localhost', port=args.port)
     print(len(server.sockets))
     async with server:
         await server.serve_forever()
+
+
+import argparse
+
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Example server app")
+    parser.add_argument(
+        "--port",
+        type=int,
+        required=False,
+        help="Port number to run the server on"
+    )
+
+    args = parser.parse_args()
+    return args
 
 
 if __name__ == "__main__":

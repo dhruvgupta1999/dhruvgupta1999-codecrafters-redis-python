@@ -1,7 +1,7 @@
 import pytest
 
 
-from app.streams_dsa import RedisStream
+from app.redis_streams import RedisStream
 
 def test_xadd_with_no_seq_num():
     r = RedisStream()

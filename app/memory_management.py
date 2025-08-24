@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from app.errors import IncrOnStringValue
 from app.key_value_utils import NO_EXPIRY, ValueObj, NULL_VALUE_OBJ, ValueTypes
-from app.streams_dsa import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ
+from app.redis_streams import RedisStream, NUM_DIGITS_TS, NUM_DIGITS_SEQ
 
 redis_memstore: [bytes, ValueObj] = {}
 

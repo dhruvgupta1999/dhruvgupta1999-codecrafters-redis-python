@@ -296,3 +296,35 @@ class RedisStream:
         while cur_leaf:
             print(cur_leaf.event_ts_id, cur_leaf.val)
             cur_leaf = cur_leaf.prev_leaf
+
+
+######################################################################################################
+
+
+def parse_xread_input(tokens):
+    """
+    normal read:
+    redis-cli XREAD streams some_key 1526985054069-0
+
+    some_key -> stream name
+    1526985054069-0 -> event id  (timestamp and seq_no)
+
+
+    blocking read:
+    redis-cli XREAD block 1000 streams some_key 1526985054069-0
+    """
+    stream_start_idx = 2
+    block_ms = None
+    if tokens[1] == b'block':
+        block_ms = int(tokens[2].decode())
+        stream_start_idx = 4
+    # Collects stream names and the start_event_ts_id for each.
+    streams = []
+    starts = []
+    for tok in tokens[stream_start_idx:]:
+        if b'-' in tok:
+            break
+        streams.append(tok)
+    for tok in tokens[stream_start_idx + len(streams):]:
+        starts.append(tok.decode())
+    return block_ms, starts, streams
