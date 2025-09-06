@@ -66,7 +66,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
     create a response and return the redis protocol serialized version of it.
 
     Generally, the response is in bytes (the msg to send over network).
-    However, for any reason if we have to send multiple messages in one go, then response can be a list of bytes.
+    However, for any reason if we have to send multiple messages in one go, then response can be a tuple of bytes.
 
 
     default -> return PONG
@@ -193,7 +193,8 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
 
             # Send fullresync, if master thinks that replica needs to re-create its cache from scratch.
             resp1 = serialize_msg(f"FULLRESYNC {replication_meta.master_replid} 0", SerializedTypes.SIMPLE_STRING)
-            # Send empty RDB file (shortcut only for this challenge)
+            # Send empty RDB file (shortcut only for this challenge).
+            # Basically this means that you are assuming master has no data at the moment.
             # RDB format: $<length_of_file>\r\n<binary_contents_of_file>
             resp2 = b'$0\r\n'
             return resp1, resp2
@@ -236,11 +237,13 @@ async def handle_client(reader, writer):
         response = await handle_command(message, addr, request_recv_time)
         # Generally, the response is in bytes (the msg to send over network).
         # However, for any reason if we have to send multiple messages in one go, then response can be a list of bytes.
-        if isinstance(response, Iterable):
+        if isinstance(response, tuple):
             for sub_r in response:
                 writer.write(sub_r)
-        else:
+        elif isinstance(response, bytes):
             writer.write(response)
+        else:
+            raise ValueError(f"Invalid value, can't send {response} as response")
         await writer.drain()
 
     writer.close()
