@@ -167,6 +167,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             # Return whether I am a master or slave
             info_map = replica_meta.copy()
             info_map['role'] = info_map['role'].value
+            print('info map', info_map)
             return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
 
 
