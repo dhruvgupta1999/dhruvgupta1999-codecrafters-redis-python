@@ -32,6 +32,19 @@ class MasterMeta:
 # Methods on Replica end
 
 
+def risky_recv(conn):
+    """
+    recv(1024) does not guarantee that you’ll get the full message in one call.
+
+    TCP is a stream protocol, not message-oriented — the data may arrive split into multiple chunks or coalesced into one.
+    You might get only part of the message on the first recv.
+
+
+    Normally, we should use some delimiter in the response.
+    Or Send a length prefix.
+    """
+    return conn.recv(1024)
+
 def get_master_conn(replica_meta):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect(replica_meta.master_addr)
@@ -42,7 +55,7 @@ def verify_master_conn_using_ping(conn):
     Send PING and expect PONG
     """
     conn.sendall(serialize_msg(['PING'], SerializedTypes.ARRAY))
-    response = conn.recv(1024)
+    response = risky_recv(conn)
     err_flag, response = parse_redis_bytes(response)
     print("received PING response from master:")
     print(str(response), type(response))
@@ -55,6 +68,9 @@ def send_replconf1(conn, listen_port):
     (for monitoring/logging purposes, not for actual propagation).
     """
     conn.sendall(serialize_msg(['REPLCONF', 'listening-port', str(listen_port)], SerializedTypes.ARRAY))
+    response = risky_recv(conn)
+    err_flag, response = parse_redis_bytes(response)
+    assert response == b'OK'
 
 def send_replconf2(conn ):
     """
@@ -63,6 +79,9 @@ def send_replconf2(conn ):
     You can safely hardcode these capabilities for now, we won't need to use them in this challenge.
     """
     conn.sendall(serialize_msg(['REPLCONF', 'capa', 'psync2'], SerializedTypes.ARRAY))
+    response = risky_recv(conn)
+    err_flag, response = parse_redis_bytes(response)
+    assert response == b'OK'
 
 def send_psync(conn):
     """
