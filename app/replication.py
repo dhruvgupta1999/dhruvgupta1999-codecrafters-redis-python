@@ -28,7 +28,7 @@ def get_master_conn(replica_meta):
     return client_socket
 
 def send_ping_to_master(conn):
-    conn.sendall(serialize_msg('PING', SerializedTypes.BULK_STRING))
+    conn.sendall(serialize_msg(['PING'], SerializedTypes.ARRAY))
 
 
 
