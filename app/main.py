@@ -12,7 +12,7 @@ from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, S
     typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
 
 from app.redis_streams import parse_xread_input
-from app.replication import ReplicaMeta, ReplicationRole, send_ping_to_master, get_master_conn
+from app.replication import ReplicaMeta, ReplicationRole, send_ping_to_master, get_master_conn, MasterMeta
 from app.transaction import Transaction
 
 
@@ -29,7 +29,7 @@ TRANSACTION = Transaction(clients_in_transaction_mode=set(), commands_in_q=defau
 xadd_conditions: dict[bytes,asyncio.Condition] = {}
 
 
-replica_meta: dict = None
+replication_meta = None
 
 ####################################################################################################
 # Utils
@@ -168,12 +168,12 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             info_map = {}
 
             print('info map', info_map)
-            if replica_meta['role'] == ReplicationRole.MASTER:
-                info_map['role'] = replica_meta['role'].value
-                info_map['master_repl_offset'] = replica_meta['master_repl_offset']
-                info_map['master_replid'] = replica_meta['master_replid']
+            if replication_meta.role == ReplicationRole.MASTER:
+                info_map['role'] = replication_meta.role.value
+                info_map['master_repl_offset'] = replication_meta.master_repl_offset
+                info_map['master_replid'] = replication_meta.master_replid
             else:
-                info_map['role'] = replica_meta.role.value
+                info_map['role'] = replication_meta.role.value
             return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
 
         case _:
@@ -219,7 +219,7 @@ async def handle_client(reader, writer):
 
 
 async def main():
-    global replica_meta
+    global replication_meta
 
     args = get_args()
     if not args.port:
@@ -229,17 +229,18 @@ async def main():
     if args.replicaof:
         master_ip, master_port = args.replicaof.split(' ')
         master_addr = master_ip, int(master_port)
-        replica_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
-                                   master_addr=master_addr)
-        client_conn = get_master_conn(replica_meta)
+        replication_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
+                                       master_addr=master_addr)
+        client_conn = get_master_conn(replication_meta)
         send_ping_to_master(client_conn)
     else:
         # 40 char alphanumeric str
         master_replid = 'a'*40
         master_repl_offset = 0
-        replica_meta = {'role':ReplicationRole.MASTER,
+
+        replication_meta = MasterMeta(**{'role':ReplicationRole.MASTER,
                         'master_replid':master_replid,
-                        'master_repl_offset':master_repl_offset}
+                        'master_repl_offset':master_repl_offset})
 
 
     server = await asyncio.start_server(handle_client, host='localhost', port=args.port)

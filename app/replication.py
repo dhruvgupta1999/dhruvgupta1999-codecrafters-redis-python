@@ -4,19 +4,28 @@ import socket
 
 from app.redis_serialization_protocol import serialize_msg, SerializedTypes
 
-
 class ReplicationRole(Enum):
     MASTER = 'master'
     SLAVE = 'slave'
 
 @dataclass
 class ReplicaMeta:
-
+    """
+    Replica fields
+    """
     role: ReplicationRole
 
     # Socket addr : (ip, port_id)
     master_addr: tuple[str, int] = None
 
+@dataclass
+class MasterMeta:
+    """
+    Master fields
+    """
+    role: ReplicationRole
+    master_replid: str
+    master_repl_offset: int
 
 
 # Methods on Replica end
