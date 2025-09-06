@@ -38,9 +38,12 @@ def get_master_conn(replica_meta):
     return client_socket
 
 def verify_master_conn_using_ping(conn):
+    """
+    Send PING and expect PONG
+    """
     conn.sendall(serialize_msg(['PING'], SerializedTypes.ARRAY))
     response = conn.recv(1024)
-    response = parse_redis_bytes(response)
+    err_flag, response = parse_redis_bytes(response)
     print("received PING response from master:")
     print(str(response), type(response))
     assert response == b'PONG'
