@@ -177,6 +177,19 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
                 info_map['role'] = replication_meta.role.value
             return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
 
+        case b'REPLCONF':
+            # This command is used by the replica to send its config.
+            # The current instance is receiving this command, and therefore is the master.
+            return OK_SIMPLE_STRING
+
+        case b'PSYNC':
+            # This command is used by the replica to send its current status (offset till which it knows existing data).
+            # The current instance is receiving this command, and therefore is the master.
+
+            # Send fullresync, if master thinks that replica needs to re-create its cache from scratch.
+            return serialize_msg(f"FULLRESYNC {replication_meta.master_replid} 0", SerializedTypes.SIMPLE_STRING)
+
+
         case _:
             result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
 
