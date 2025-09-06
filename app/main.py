@@ -12,7 +12,7 @@ from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, S
     typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
 
 from app.redis_streams import parse_xread_input
-from app.replication import ReplicationMeta, ReplicationRole
+from app.replication import ReplicaMeta, ReplicationRole, send_ping_to_master, get_master_conn
 from app.transaction import Transaction
 
 
@@ -164,13 +164,16 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
 
         # Redis Replication
         case b'INFO':
-            # Return whether I am a master or slave
+            # Return whether I am a master or slave and some extra details.
             info_map = {}
-            info_map['role'] = replica_meta['role'].value
+
             print('info map', info_map)
             if replica_meta['role'] == ReplicationRole.MASTER:
+                info_map['role'] = replica_meta['role'].value
                 info_map['master_repl_offset'] = replica_meta['master_repl_offset']
                 info_map['master_replid'] = replica_meta['master_replid']
+            else:
+                info_map['role'] = replica_meta.role.value
             return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
 
         case _:
@@ -226,7 +229,10 @@ async def main():
     if args.replicaof:
         master_ip, master_port = args.replicaof.split(' ')
         master_addr = master_ip, int(master_port)
-        replica_meta = {'role':ReplicationRole.SLAVE, 'master_addr':master_addr}
+        replica_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
+                                   master_addr=master_addr)
+        client_conn = get_master_conn(replica_meta)
+        send_ping_to_master(client_conn)
     else:
         # 40 char alphanumeric str
         master_replid = 'a'*40
@@ -234,6 +240,7 @@ async def main():
         replica_meta = {'role':ReplicationRole.MASTER,
                         'master_replid':master_replid,
                         'master_repl_offset':master_repl_offset}
+
 
     server = await asyncio.start_server(handle_client, host='localhost', port=args.port)
     print(len(server.sockets))
