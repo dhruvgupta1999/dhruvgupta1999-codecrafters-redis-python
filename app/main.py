@@ -21,8 +21,7 @@ from app.transaction import Transaction
 
 MAX_MSG_LEN = 1000
 
-TRANSACTION: Transaction = Transaction(clients_in_transaction_mode=set(),
-                                       commands_in_q=defaultdict(list))
+TRANSACTION = Transaction(clients_in_transaction_mode=set(), commands_in_q=defaultdict(list))
 
 # For use by REDIS STREAM
 # This is to wait for xadd by calls like xread.
@@ -30,7 +29,7 @@ TRANSACTION: Transaction = Transaction(clients_in_transaction_mode=set(),
 xadd_conditions: dict[bytes,asyncio.Condition] = {}
 
 
-replica_meta: ReplicationMeta = None
+replica_meta: dict = None
 
 ####################################################################################################
 # Utils
@@ -166,7 +165,9 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
         # Redis Replication
         case b'INFO':
             # Return whether I am a master or slave
-            return serialize_msg(f"role:{replica_meta.role.value}",  SerializedTypes.BULK_STRING)
+            info_map = replica_meta.copy()
+            info_map['role'] = info_map['role'].value
+            return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
 
 
         case _:
@@ -213,11 +214,7 @@ async def handle_client(reader, writer):
 
 async def main():
     global replica_meta
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
 
-    # Uncomment this to pass the first stage
-    #
     args = get_args()
     if not args.port:
         args.port = 6379
@@ -226,9 +223,14 @@ async def main():
     if args.replicaof:
         master_ip, master_port = args.replicaof.split(' ')
         master_addr = master_ip, int(master_port)
-        replica_meta = ReplicationMeta(role=ReplicationRole.SLAVE, master_addr=master_addr)
+        replica_meta = {'role':ReplicationRole.SLAVE, 'master_addr':master_addr}
     else:
-        replica_meta = ReplicationMeta(role=ReplicationRole.MASTER)
+        # 40 char alphanumeric str
+        master_replid = 'a'*40
+        master_repl_offset = 0
+        replica_meta = {'role':ReplicationRole.MASTER,
+                        'master_replid':master_replid,
+                        'master_repl_offset':master_repl_offset}
 
     server = await asyncio.start_server(handle_client, host='localhost', port=args.port)
     print(len(server.sockets))

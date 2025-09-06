@@ -109,7 +109,21 @@ def typecast_as_bytes(msg) -> bytes:
     if isinstance(msg, str):
         return msg.encode()
 
-def serialize_msg(msg: int|bytes|str|list, data_type: SerializedTypes):
+def dict_as_bulk_str(d):
+    """
+    I found this to be not obvious and hope it can help others. Bulk string is defined as $<length>\r\n<data>\r\n.
+
+    <data> in this case is something like
+    "role:master\r\nmaster_repl_offset:0\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+    and <length> is the number of characters above.
+
+    Please take note that the last value in data does not have the CRLF terminator.
+    That does not count towards the total number of characters comprising length;
+    however, it will still need to be added prior to being sent over the wire.
+    """
+    return CLRS.join([typecast_as_bytes(k)+b':'+typecast_as_bytes(v) for k,v in d.items()])
+
+def serialize_msg(msg: int|bytes|str|list|dict, data_type: SerializedTypes):
     match data_type:
         case SerializedTypes.SIMPLE_STRING:
             msg = typecast_as_bytes(msg)
@@ -118,7 +132,10 @@ def serialize_msg(msg: int|bytes|str|list, data_type: SerializedTypes):
             msg = typecast_as_bytes(msg)
             return b':' + msg + CLRS
         case SerializedTypes.BULK_STRING:
-            msg = typecast_as_bytes(msg)
+            if isinstance(msg, dict):
+                msg = dict_as_bulk_str(msg)
+            else:
+                msg = typecast_as_bytes(msg)
             data_len_as_bytes = typecast_as_bytes(len(msg))
             return b'$' + data_len_as_bytes + CLRS + msg + CLRS
         case SerializedTypes.ERROR:
