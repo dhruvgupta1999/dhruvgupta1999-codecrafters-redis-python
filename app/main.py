@@ -65,6 +65,10 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
     """
     create a response and return the redis protocol serialized version of it.
 
+    Generally, the response is in bytes (the msg to send over network).
+    However, for any reason if we have to send multiple messages in one go, then response can be a list of bytes.
+
+
     default -> return PONG
     supports ECHO , GET <key>, SET <key> px <time_to_live_ms>.
     """
@@ -164,6 +168,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
 
 
         # Redis Replication
+
         case b'INFO':
             # Return whether I am a master or slave and some extra details.
             info_map = {}
@@ -187,7 +192,11 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             # The current instance is receiving this command, and therefore is the master.
 
             # Send fullresync, if master thinks that replica needs to re-create its cache from scratch.
-            return serialize_msg(f"FULLRESYNC {replication_meta.master_replid} 0", SerializedTypes.SIMPLE_STRING)
+            resp1 = serialize_msg(f"FULLRESYNC {replication_meta.master_replid} 0", SerializedTypes.SIMPLE_STRING)
+            # Send empty RDB file (shortcut only for this challenge)
+            # RDB format: $<length_of_file>\r\n<binary_contents_of_file>
+            resp2 = b'$0\r\n'
+            return resp1, resp2
 
 
         case _:
@@ -225,7 +234,13 @@ async def handle_client(reader, writer):
         # Note: commands are received as redis array. eg: "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n"
         # After parsing, this will become a list. so message is a list, not str.
         response = await handle_command(message, addr, request_recv_time)
-        writer.write(response)
+        # Generally, the response is in bytes (the msg to send over network).
+        # However, for any reason if we have to send multiple messages in one go, then response can be a list of bytes.
+        if isinstance(response, Iterable):
+            for sub_r in response:
+                writer.write(sub_r)
+        else:
+            writer.write(response)
         await writer.drain()
 
     writer.close()
