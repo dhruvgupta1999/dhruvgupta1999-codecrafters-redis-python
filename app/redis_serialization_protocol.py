@@ -108,6 +108,7 @@ def typecast_as_bytes(msg) -> bytes:
         return str(msg).encode()
     if isinstance(msg, str):
         return msg.encode()
+    raise ValueError(f"Cannot convert {msg} of {type(msg)} to bytes")
 
 def dict_as_bulk_str(d):
     """

@@ -165,11 +165,13 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
         # Redis Replication
         case b'INFO':
             # Return whether I am a master or slave
-            info_map = replica_meta.copy()
-            info_map['role'] = info_map['role'].value
+            info_map = {}
+            info_map['role'] = replica_meta['role'].value
             print('info map', info_map)
+            if replica_meta['role'] == ReplicationRole.MASTER:
+                info_map['master_repl_offset'] = replica_meta['master_repl_offset']
+                info_map['master_replid'] = replica_meta['master_replid']
             return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
-
 
         case _:
             result = serialize_msg('PONG', SerializedTypes.SIMPLE_STRING)
