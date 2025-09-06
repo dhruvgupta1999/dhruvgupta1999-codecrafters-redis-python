@@ -12,7 +12,8 @@ from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, S
     typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
 
 from app.redis_streams import parse_xread_input
-from app.replication import ReplicaMeta, ReplicationRole, send_ping_to_master, get_master_conn, MasterMeta
+from app.replication import ReplicaMeta, ReplicationRole, verify_master_conn_using_ping, get_master_conn, MasterMeta, \
+    send_replconf1, send_replconf2
 from app.transaction import Transaction
 
 
@@ -227,13 +228,21 @@ async def main():
     print(f"Server will run on port: {args.port}")
 
     if args.replicaof:
+        # This instance is a replica.
         master_ip, master_port = args.replicaof.split(' ')
         master_addr = master_ip, int(master_port)
         replication_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
                                        master_addr=master_addr)
         client_conn = get_master_conn(replication_meta)
-        send_ping_to_master(client_conn)
+        # send ping and check for pong
+        verify_master_conn_using_ping(client_conn)
+        # The replica sends REPLCONF twice to the master (replica config)
+        # we send the listening port for logging, and then the capabilities of the replica.
+        send_replconf1(client_conn, args.port)
+        send_replconf2(client_conn)
     else:
+        # This instance is the master.
+        #
         # 40 char alphanumeric str
         master_replid = 'a'*40
         master_repl_offset = 0
