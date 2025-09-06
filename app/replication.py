@@ -64,11 +64,23 @@ def send_replconf2(conn ):
     """
     conn.sendall(serialize_msg(['REPLCONF', 'capa', 'psync2'], SerializedTypes.ARRAY))
 
+def send_psync(conn):
+    """
+    The PSYNC command is used to synchronize the state of the replica with the master.
+    The replica sends this command to the master with two arguments:
+
+    1. **Replication ID of the master**
+       - For the first connection, the replication ID is set to `'?'` (a question mark).
+
+    2. **Offset of the master**
+       - For the first connection, the offset is set to `-1`.
+
+    This allows the master to determine whether a full or partial resynchronization is needed.
+    """
+    conn.sendall(serialize_msg(['PSYNC', '?', '-1'], SerializedTypes.ARRAY))
 
 
 
 
-
-
-
+#########################################################################
 # Methods on Master end

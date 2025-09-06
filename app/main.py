@@ -13,7 +13,7 @@ from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, S
 
 from app.redis_streams import parse_xread_input
 from app.replication import ReplicaMeta, ReplicationRole, verify_master_conn_using_ping, get_master_conn, MasterMeta, \
-    send_replconf1, send_replconf2
+    send_replconf1, send_replconf2, send_psync
 from app.transaction import Transaction
 
 
@@ -240,6 +240,7 @@ async def main():
         # we send the listening port for logging, and then the capabilities of the replica.
         send_replconf1(client_conn, args.port)
         send_replconf2(client_conn)
+        send_psync(client_conn)
     else:
         # This instance is the master.
         #
