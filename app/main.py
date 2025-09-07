@@ -8,8 +8,9 @@ import argparse
 from app.errors import InvalidStreamEventTsId, IncrOnStringValue
 from app.memory_management import redis_memstore, get_from_memstore, set_to_memstore, append_stream_event, \
     pretty_print_stream, run_xread, incr_in_memstore
+from app.rdb import EMPTY_RDB_HEX
 from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, SerializedTypes, OK_SIMPLE_STRING, \
-    typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems
+    typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems, CLRS
 
 from app.redis_streams import parse_xread_input
 from app.replication import ReplicaMeta, ReplicationRole, verify_master_conn_using_ping, get_master_conn, MasterMeta, \
@@ -196,7 +197,8 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             # Send empty RDB file (shortcut only for this challenge).
             # Basically this means that you are assuming master has no data at the moment.
             # RDB format: $<length_of_file>\r\n<binary_contents_of_file>
-            resp2 = b'$0\r\n'
+            empty_rdb_bytes = bytes.fromhex(EMPTY_RDB_HEX)
+            resp2 = b'$' + str(len(empty_rdb_bytes)).encode() + CLRS + empty_rdb_bytes
             return resp1, resp2
 
 
