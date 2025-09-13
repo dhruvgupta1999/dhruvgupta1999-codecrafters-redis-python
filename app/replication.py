@@ -3,8 +3,12 @@ from dataclasses import dataclass
 from enum import Enum
 import socket
 
-from app.redis_serialization_protocol import serialize_msg, SerializedTypes, parse_redis_bytes
+from app.errors import IncrOnStringValue
+from app.memory_management import set_to_memstore, incr_in_memstore
+from app.redis_serialization_protocol import serialize_msg, SerializedTypes, parse_redis_bytes, OK_SIMPLE_STRING, \
+    parse_redis_bytes_multiple_cmd
 
+MAX_MSG_LEN = 1000
 
 class ReplicationRole(Enum):
     MASTER = 'master'
@@ -35,6 +39,11 @@ class MasterMeta:
 
 _replication_meta = None
 
+# Keep note of master conn reader and writer
+# master will propagate command on this connection itself.
+_master_conn_reader = None
+_master_conn_writer = None
+
 
 def get_replication_info():
     info_map = {}
@@ -58,18 +67,19 @@ async def _init_master():
                                      'master_repl_offset': master_repl_offset})
 
 
-def _init_replica(master_addr, port):
+async def _init_replica(master_addr, port):
     global _replication_meta
     _replication_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
                                     master_addr=master_addr)
-    conn_to_master = get_master_conn(_replication_meta)
+    await async_master_conn(_replication_meta)
     # send ping and check for pong
-    verify_master_conn_using_ping(conn_to_master)
+    await verify_master_conn_using_ping()
     # The replica sends REPLCONF twice to the master (replica config)
     # we send the listening port for logging, and then the capabilities of the replica.
-    send_replconf1(conn_to_master, port)
-    send_replconf2(conn_to_master)
-    send_psync(conn_to_master)
+    await send_replconf1(port)
+    await send_replconf2()
+    await send_psync()
+    await listen_on_master()
 
 
 def get_replication_role():
@@ -82,7 +92,7 @@ def is_master():
 # Methods on Replica end
 
 
-def risky_recv(conn):
+async def risky_recv():
     """
     recv(1024) does not guarantee that you’ll get the full message in one call.
 
@@ -93,47 +103,60 @@ def risky_recv(conn):
     Normally, we should use some delimiter in the response.
     Or Send a length prefix.
     """
-    return conn.recv(1024)
+    return await _master_conn_reader.read(MAX_MSG_LEN)
+
+async def write_to_master(data: bytes):
+    _master_conn_writer.write(data)
+    await _master_conn_writer.drain()
 
 def get_master_conn(replica_meta):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect(replica_meta.master_addr)
     return client_socket
 
-def verify_master_conn_using_ping(conn):
+async def async_master_conn(replica_meta):
+    global _master_conn_reader, _master_conn_writer
+    reader, writer = await asyncio.open_connection(
+        host=replica_meta.master_addr[0],
+        port=replica_meta.master_addr[1]
+    )
+    _master_conn_reader = reader
+    _master_conn_writer = writer
+
+async def verify_master_conn_using_ping():
     """
     Send PING and expect PONG
     """
-    conn.sendall(serialize_msg(['PING'], SerializedTypes.ARRAY))
-    response = risky_recv(conn)
+    await write_to_master(serialize_msg(['PING'], SerializedTypes.ARRAY))
+    response = await risky_recv()
     err_flag, response = parse_redis_bytes(response)
     print("received PING response from master:")
     print(str(response), type(response))
     assert response == b'PONG'
 
-def send_replconf1(conn, listen_port):
+async def send_replconf1(listen_port):
     """
     The first time, it'll be sent like this: REPLCONF listening-port <PORT>
     This is the replica notifying the master of the port it's listening on
     (for monitoring/logging purposes, not for actual propagation).
     """
-    conn.sendall(serialize_msg(['REPLCONF', 'listening-port', str(listen_port)], SerializedTypes.ARRAY))
-    response = risky_recv(conn)
+    await write_to_master(serialize_msg(['REPLCONF', 'listening-port', str(listen_port)], SerializedTypes.ARRAY))
+    response = await risky_recv()
     err_flag, response = parse_redis_bytes(response)
     assert response == b'OK'
 
-def send_replconf2(conn ):
+async def send_replconf2():
     """
     The second time, it'll be sent like this: REPLCONF capa psync2
     This is the replica notifying the master of its capabilities ("capa" is short for "capabilities")
     You can safely hardcode these capabilities for now, we won't need to use them in this challenge.
     """
-    conn.sendall(serialize_msg(['REPLCONF', 'capa', 'psync2'], SerializedTypes.ARRAY))
-    response = risky_recv(conn)
+    await write_to_master(serialize_msg(['REPLCONF', 'capa', 'psync2'], SerializedTypes.ARRAY))
+    response = await risky_recv()
     err_flag, response = parse_redis_bytes(response)
     assert response == b'OK'
 
-def send_psync(conn):
+async def send_psync():
     """
     The PSYNC command is used to synchronize the state of the replica with the master.
     The replica sends this command to the master with two arguments:
@@ -146,9 +169,35 @@ def send_psync(conn):
 
     This allows the master to determine whether a full or partial resynchronization is needed.
     """
-    conn.sendall(serialize_msg(['PSYNC', '?', '-1'], SerializedTypes.ARRAY))
+    await write_to_master(serialize_msg(['PSYNC', '?', '-1'], SerializedTypes.ARRAY))
 
+async def listen_on_master():
+    while True:
+        data = await _master_conn_reader.read(MAX_MSG_LEN)
+        cmds = parse_redis_bytes_multiple_cmd(data)
+        print("cmds recvd from master:\n", cmds)
 
+        for message in cmds:
+            # for simplicity I am handling only simple SET and INCR, no TTL nothing (unless later challenges require it).
+            # This is good enough for POC.
+            tokens = list(message)
+            first_token = tokens[0].upper()
+            print('first token:', first_token)
+            match first_token:
+                case b'SET':
+                    key, val = tokens[1], tokens[2]
+                    time_to_live_ms = None
+                    set_to_memstore(key, val)
+                    return OK_SIMPLE_STRING
+                case b'INCR':
+                    key = tokens[1]
+                    try:
+                        num = incr_in_memstore(key)
+                    except IncrOnStringValue as e:
+                        return serialize_msg(str(e), SerializedTypes.ERROR)
+                    result = serialize_msg(num, SerializedTypes.INTEGER)
+                    print("INCR result:", result)
+                    return result
 
 
 #########################################################################

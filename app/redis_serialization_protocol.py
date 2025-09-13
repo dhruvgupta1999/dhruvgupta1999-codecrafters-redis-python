@@ -74,14 +74,13 @@ def parse_primitive(msg, start_index):
         case _:
             raise ValueError(f"Unsupported data type: {data_type}")
 
-def parse_redis_bytes(msg) -> tuple[bool, Any]:
+def parse_redis_bytes(msg: bytes) -> tuple[bool, Any]:
     """
     return is_error, msg
 
     is_error => if type of message is ERROR
     """
     index = 0
-    n = len(msg)
     data_type = SerializedTypes(msg[index:index + 1])
     if data_type == SerializedTypes.ERROR:
         # assuming error comes only by itself, without any other data types.
@@ -90,6 +89,18 @@ def parse_redis_bytes(msg) -> tuple[bool, Any]:
     else:
         return False, parse_primitive(msg, index)[0]
 
+
+def parse_redis_bytes_multiple_cmd(msg: bytes) -> list[Any]:
+    """
+    Use this function if the msg may have multiple commands.
+
+    """
+    index = 0
+    result = []
+    while index < len(msg):
+        val, index = parse_primitive(msg, index)
+        result.append(val)
+    return result
 
 
 ##################################################################################################
