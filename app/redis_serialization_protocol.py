@@ -59,6 +59,7 @@ def parse_array(msg, start_index):
         result.append(e)
     return result, index
 
+
 def parse_primitive(msg, start_index):
     data_type = SerializedTypes(msg[start_index:start_index + 1])
     match data_type:
