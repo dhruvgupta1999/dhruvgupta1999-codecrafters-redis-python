@@ -270,7 +270,7 @@ async def main():
         master_ip, master_port = args.replicaof.split(' ')
         port = args.port
         master_addr = master_ip, int(master_port)
-        _init_replica(master_addr, port)
+        await _init_replica(master_addr, port)
     else:
         # This instance is the master.
         #
