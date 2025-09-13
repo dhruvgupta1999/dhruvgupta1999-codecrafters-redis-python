@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from enum import Enum
 import socket
@@ -29,6 +30,55 @@ class MasterMeta:
     master_repl_offset: int
 
 
+########################################################################################
+# Replication Meta
+
+_replication_meta = None
+
+
+def get_replication_info():
+    info_map = {}
+    print('info map', info_map)
+    if _replication_meta.role == ReplicationRole.MASTER:
+        info_map['role'] = _replication_meta.role.value
+        info_map['master_repl_offset'] = _replication_meta.master_repl_offset
+        info_map['master_replid'] = _replication_meta.master_replid
+    else:
+        info_map['role'] = _replication_meta.role.value
+    return info_map
+
+
+async def _init_master():
+    global _replication_meta
+    # 40 char alphanumeric str
+    master_replid = 'a' * 40
+    master_repl_offset = 0
+    _replication_meta = MasterMeta(**{'role': ReplicationRole.MASTER,
+                                     'master_replid': master_replid,
+                                     'master_repl_offset': master_repl_offset})
+
+
+def _init_replica(master_addr, port):
+    global _replication_meta
+    _replication_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
+                                    master_addr=master_addr)
+    conn_to_master = get_master_conn(_replication_meta)
+    # send ping and check for pong
+    verify_master_conn_using_ping(conn_to_master)
+    # The replica sends REPLCONF twice to the master (replica config)
+    # we send the listening port for logging, and then the capabilities of the replica.
+    send_replconf1(conn_to_master, port)
+    send_replconf2(conn_to_master)
+    send_psync(conn_to_master)
+
+
+def get_replication_role():
+    return _replication_meta.role
+
+def is_master():
+    return _replication_meta.role == ReplicationRole.MASTER
+
+########################################################################################
 # Methods on Replica end
 
 
@@ -103,3 +153,28 @@ def send_psync(conn):
 
 #########################################################################
 # Methods on Master end
+
+# Stores replicas connected to this master.
+_my_replicas = set()
+
+def get_master_replid():
+    return _replication_meta.master_replid
+
+
+def add_replica_conn(write_conn):
+    _my_replicas.add(write_conn)
+    print("num replicas connected to master:", len(_my_replicas))
+
+
+async def propagate_to_replica_if_write_cmd(data: bytes):
+    # Only master can propagate commands.
+    if not is_master():
+        return
+    CMDS_TO_PROPAGATE = [b'SET', b'INCR']
+    err_flag, message = parse_redis_bytes(data)
+    tokens = list(message)
+    first_token = tokens[0].upper()
+    if first_token in CMDS_TO_PROPAGATE:
+        await asyncio.gather(
+            *(w.drain() for w in _my_replicas)
+        )

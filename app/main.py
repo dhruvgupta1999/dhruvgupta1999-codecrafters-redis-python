@@ -13,8 +13,8 @@ from app.redis_serialization_protocol import parse_redis_bytes, serialize_msg, S
     typecast_as_int, NULL_BULK_STRING, get_resp_array_from_elems, CLRS
 
 from app.redis_streams import parse_xread_input
-from app.replication import ReplicaMeta, ReplicationRole, verify_master_conn_using_ping, get_master_conn, MasterMeta, \
-    send_replconf1, send_replconf2, send_psync
+from app.replication import get_replication_info, _init_master, _init_replica, get_master_replid, add_replica_conn, \
+    propagate_to_replica_if_write_cmd
 from app.transaction import Transaction
 
 
@@ -30,8 +30,6 @@ TRANSACTION = Transaction(clients_in_transaction_mode=set(), commands_in_q=defau
 # Each stream has an asyncio.Condition() to keep track of new xadds.
 xadd_conditions: dict[bytes,asyncio.Condition] = {}
 
-
-replication_meta = None
 
 ####################################################################################################
 # Utils
@@ -49,7 +47,7 @@ async def handle_command_when_in_transaction(addr, first_token, msg):
     if first_token == b'EXEC':
         # further calls to handle_command won't be queued.
         TRANSACTION.clients_in_transaction_mode.remove(addr)
-        result = [await handle_command(msg, addr) for msg in TRANSACTION.commands_in_q[addr]]
+        result = [await handle_command(msg, addr, write_conn) for msg in TRANSACTION.commands_in_q[addr]]
 
         # Now delete the commands_in_q[addr]
         del TRANSACTION.commands_in_q[addr]
@@ -62,7 +60,7 @@ async def handle_command_when_in_transaction(addr, first_token, msg):
     TRANSACTION.commands_in_q[addr].append(msg)
     return serialize_msg('QUEUED', SerializedTypes.SIMPLE_STRING)
 
-async def handle_command(msg, addr, request_recv_time_ms=None):
+async def handle_command(msg, addr, write_conn, request_recv_time_ms=None):
     """
     create a response and return the redis protocol serialized version of it.
 
@@ -153,6 +151,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
 
         # Redis transactions
 
+        # not adding replication support for these.
         case b'MULTI':
             # Start a transaction for the client
             if addr in TRANSACTION.clients_in_transaction_mode:
@@ -172,20 +171,15 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
 
         case b'INFO':
             # Return whether I am a master or slave and some extra details.
-            info_map = {}
-
-            print('info map', info_map)
-            if replication_meta.role == ReplicationRole.MASTER:
-                info_map['role'] = replication_meta.role.value
-                info_map['master_repl_offset'] = replication_meta.master_repl_offset
-                info_map['master_replid'] = replication_meta.master_replid
-            else:
-                info_map['role'] = replication_meta.role.value
+            info_map = get_replication_info()
             return serialize_msg(info_map,  SerializedTypes.BULK_STRING)
 
         case b'REPLCONF':
             # This command is used by the replica to send its config.
             # The current instance is receiving this command, and therefore is the master.
+
+            # Add the replica write_conn to list of replicas that master handles.
+            add_replica_conn(write_conn)
             return OK_SIMPLE_STRING
 
         case b'PSYNC':
@@ -193,7 +187,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
             # The current instance is receiving this command, and therefore is the master.
 
             # Send fullresync, if master thinks that replica needs to re-create its cache from scratch.
-            resp1 = serialize_msg(f"FULLRESYNC {replication_meta.master_replid} 0", SerializedTypes.SIMPLE_STRING)
+            resp1 = serialize_msg(f"FULLRESYNC {get_master_replid()} 0", SerializedTypes.SIMPLE_STRING)
             # Send empty RDB file (shortcut only for this challenge).
             # Basically this means that you are assuming master has no data at the moment.
             # RDB format: $<length_of_file>\r\n<binary_contents_of_file>
@@ -208,6 +202,7 @@ async def handle_command(msg, addr, request_recv_time_ms=None):
     print("response created: ", result)
     return result
 
+
 ####################################################################################################
 # Basic Server boilerplate
 
@@ -219,7 +214,7 @@ async def handle_client(reader, writer):
 
     while True:
         data = await reader.read(MAX_MSG_LEN)
-        # VERY IMP: Note down the time the request was received.
+        # VERY IMP: Note down the time the request was received (for TTL support)
         # TO make sure the expiry time ms is calculated accurately.
         # For SET: request_recv_time + time_to_live is set as value_obj.expiry_time
         # For GET: request_recv_time < value_obj.expiry_time determines whether expired or not.
@@ -236,7 +231,10 @@ async def handle_client(reader, writer):
 
         # Note: commands are received as redis array. eg: "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n"
         # After parsing, this will become a list. so message is a list, not str.
-        response = await handle_command(message, addr, request_recv_time)
+        response = await handle_command(message, addr, writer, request_recv_time)
+
+        await propagate_to_replica_if_write_cmd(data)
+
         # Generally, the response is in bytes (the msg to send over network).
         # However, for any reason if we have to send multiple messages in one go, then response can be a list of bytes.
         if isinstance(response, tuple):
@@ -246,6 +244,15 @@ async def handle_client(reader, writer):
             writer.write(response)
         else:
             raise ValueError(f"Invalid value, can't send {response} as response")
+
+        # A Replication Note.
+        # When we await writer.drain() to send RDB snapshot data to our replica as a response to PSYNC,
+        # we give up control to some other async task.
+        # Now if that async task sets some value to the master-cache (SET FOO 10),
+        # we need to propagate that cmd to our replica as well.
+        # The challenge is buffering those propagated commands, until writer.drain(rdb_file) completes.
+        # Can use asyncio.Condition.notify_all() just after writer.drain(rdb_file_data).
+        # On the green signal, the task that is buffering the commands will flush them to the replica.
         await writer.drain()
 
     writer.close()
@@ -253,8 +260,6 @@ async def handle_client(reader, writer):
 
 
 async def main():
-    global replication_meta
-
     args = get_args()
     if not args.port:
         args.port = 6379
@@ -263,28 +268,13 @@ async def main():
     if args.replicaof:
         # This instance is a replica.
         master_ip, master_port = args.replicaof.split(' ')
+        port = args.port
         master_addr = master_ip, int(master_port)
-        replication_meta = ReplicaMeta(role=ReplicationRole.SLAVE,
-                                       master_addr=master_addr)
-        client_conn = get_master_conn(replication_meta)
-        # send ping and check for pong
-        verify_master_conn_using_ping(client_conn)
-        # The replica sends REPLCONF twice to the master (replica config)
-        # we send the listening port for logging, and then the capabilities of the replica.
-        send_replconf1(client_conn, args.port)
-        send_replconf2(client_conn)
-        send_psync(client_conn)
+        _init_replica(master_addr, port)
     else:
         # This instance is the master.
         #
-        # 40 char alphanumeric str
-        master_replid = 'a'*40
-        master_repl_offset = 0
-
-        replication_meta = MasterMeta(**{'role':ReplicationRole.MASTER,
-                        'master_replid':master_replid,
-                        'master_repl_offset':master_repl_offset})
-
+        await _init_master()
 
     server = await asyncio.start_server(handle_client, host='localhost', port=args.port)
     print(len(server.sockets))
