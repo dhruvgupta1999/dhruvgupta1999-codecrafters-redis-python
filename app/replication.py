@@ -179,5 +179,5 @@ async def propagate_to_replica_if_write_cmd(data: bytes):
         #     *(w.drain() for w in _my_replicas)
         # )
         for w in _my_replicas:
-            w.write()
+            w.write(data)
             await w.drain()
