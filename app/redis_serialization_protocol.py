@@ -38,8 +38,8 @@ def parse_simple_str(msg, start_index):
 def parse_int(msg, start_index):
     msg_after_start = msg[start_index:]
     end_idx = msg_after_start.find(CLRS)
-    print('start_index+1', start_index+1)
-    print('end_idx', end_idx)
+    # print('start_index+1', start_index+1)
+    # print('end_idx', end_idx)
     return int(msg_after_start[1:end_idx].decode()), end_idx + 2 + start_index
 
 def parse_bulk_str(msg, start_index) -> tuple[bytes, int]:

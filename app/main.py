@@ -47,7 +47,7 @@ async def handle_command_when_in_transaction(addr, first_token, msg):
     if first_token == b'EXEC':
         # further calls to handle_command won't be queued.
         TRANSACTION.clients_in_transaction_mode.remove(addr)
-        result = [await handle_command(msg, addr, write_conn) for msg in TRANSACTION.commands_in_q[addr]]
+        result = [await handle_command(msg, addr) for msg in TRANSACTION.commands_in_q[addr]]
 
         # Now delete the commands_in_q[addr]
         del TRANSACTION.commands_in_q[addr]
@@ -60,7 +60,7 @@ async def handle_command_when_in_transaction(addr, first_token, msg):
     TRANSACTION.commands_in_q[addr].append(msg)
     return serialize_msg('QUEUED', SerializedTypes.SIMPLE_STRING)
 
-async def handle_command(msg, addr, write_conn, request_recv_time_ms=None):
+async def handle_command(msg, addr, write_conn=None, request_recv_time_ms=None):
     """
     create a response and return the redis protocol serialized version of it.
 
