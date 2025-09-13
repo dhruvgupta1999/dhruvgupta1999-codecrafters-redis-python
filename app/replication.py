@@ -175,9 +175,11 @@ async def propagate_to_replica_if_write_cmd(data: bytes):
     tokens = list(message)
     first_token = tokens[0].upper()
     if first_token in CMDS_TO_PROPAGATE:
-        # await asyncio.gather(
-        #     *(w.drain() for w in _my_replicas)
-        # )
         for w in _my_replicas:
             w.write(data)
-            await w.drain()
+
+        # use asyncio.gather to simultaneously drain all replica writers.
+        await asyncio.gather(
+            *(w.drain() for w in _my_replicas)
+        )
+
