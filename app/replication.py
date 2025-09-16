@@ -196,18 +196,10 @@ async def listen_on_master():
             match first_token:
                 case b'SET':
                     key, val = tokens[1], tokens[2]
-                    time_to_live_ms = None
                     set_to_memstore(key, val)
-                    return OK_SIMPLE_STRING
                 case b'INCR':
                     key = tokens[1]
-                    try:
-                        num = incr_in_memstore(key)
-                    except IncrOnStringValue as e:
-                        return serialize_msg(str(e), SerializedTypes.ERROR)
-                    result = serialize_msg(num, SerializedTypes.INTEGER)
-                    print("INCR result:", result)
-                    return result
+                    num = incr_in_memstore(key)
 
 
 #########################################################################
