@@ -191,6 +191,7 @@ async def listen_on_master():
             # for simplicity I am handling only simple SET and INCR, no TTL nothing (unless later challenges require it).
             # This is good enough for POC.
             tokens = list(message)
+            print(tokens)
             first_token = tokens[0].upper()
             print('first token:', first_token)
             match first_token:
