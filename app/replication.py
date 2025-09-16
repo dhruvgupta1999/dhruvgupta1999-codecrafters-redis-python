@@ -171,6 +171,7 @@ async def send_psync():
     """
     await write_to_master(serialize_msg(['PSYNC', '?', '-1'], SerializedTypes.ARRAY))
 
+
 async def listen_on_master():
     while True:
         data = await _master_conn_reader.read(MAX_MSG_LEN)
