@@ -82,7 +82,8 @@ async def _init_replica(master_addr, port):
     # Now master returns whether I need to do FULLRESYNC or partial sync.
     # It also sends an RDB file.
     # Let's just ignore the result of this message as our replication tech doesn't have RDB support.
-    await _master_conn_reader.read(MAX_MSG_LEN)
+    sync_msg = await _master_conn_reader.read(MAX_MSG_LEN)
+    print(str(sync_msg))
     # Now listen for propagated commands like SET/INCR
     await listen_on_master()
 
