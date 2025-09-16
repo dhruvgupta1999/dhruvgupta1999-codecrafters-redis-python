@@ -184,6 +184,11 @@ async def send_psync():
 async def listen_on_master():
     while True:
         data = await _master_conn_reader.read(MAX_MSG_LEN)
+        if not data:
+            # When no data, that means EOF was sent.
+            # Client has closed connection, so break out of loop.
+            print(f"Connection closed by master")
+            break
         cmds = parse_redis_bytes_multiple_cmd(data)
         print("cmds recvd from master:\n", cmds)
 
