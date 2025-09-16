@@ -85,7 +85,10 @@ async def _init_replica(master_addr, port):
     sync_msg = await _master_conn_reader.read(MAX_MSG_LEN)
     print(str(sync_msg))
     # Now listen for propagated commands like SET/INCR
-    await listen_on_master()
+    # Start background listener.
+    # IMPORTANT NOTE: We can't directly do "await listen_on_master()" else we will be blocked here.
+    # We need to run this in background, so that we can continue and start the server to which clients can connect.
+    asyncio.create_task(listen_on_master())
 
 
 def get_replication_role():
