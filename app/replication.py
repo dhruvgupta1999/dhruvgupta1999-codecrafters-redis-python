@@ -109,10 +109,11 @@ def get_bytes_after_fullresync(resync_msg):
     tokens = resync_msg.split(SPACE)
     # ignore first two tokens (FULLRESYNC <master_id>)
     # third token has rdb file followed immediately by the next command (without space).
-    # third token: <offset>\r\n<length>\r\n<rdb_snapshot_bytes><any_other_commands_might_also_be_here>
+    # third token: <offset>\r\n$<length>\r\n<rdb_snapshot_bytes><any_other_commands_might_also_be_here>
     third_token = tokens[2]
     third_token_split = third_token.split(CLRS)
-    rdb_len = third_token_split[1]
+    # The rdb_length is in format $<int_len>. So skip the $.
+    rdb_len = third_token_split[1][1:]
     rdb_len = int(rdb_len)
 
     bytes_after_rdb_len = CLRS.join(third_token_split[2:])
