@@ -229,6 +229,7 @@ async def listen_to_master():
             # Client has closed connection, so break out of loop.
             print(f"Connection closed by master")
             break
+        print('data recvd from master', data)
         await handle_propagated_cmds(data)
 
 
