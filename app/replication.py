@@ -113,7 +113,7 @@ def get_bytes_after_fullresync(resync_msg):
     third_token = tokens[2]
     third_token_split = third_token.split(CLRS)
     rdb_len = third_token_split[1]
-    rdb_len = int.from_bytes(rdb_len)
+    rdb_len = int(rdb_len)
 
     bytes_after_rdb_len = CLRS.join(third_token_split[2:])
     bytes_after_rdb = bytes_after_rdb_len[rdb_len:]
@@ -125,9 +125,6 @@ def get_bytes_after_fullresync(resync_msg):
         result += b' ' + b' '.join(tokens[3:])
     print('bytes after FULLRESYNC', result)
     return result
-
-
-
 
 
 def get_replication_role():
