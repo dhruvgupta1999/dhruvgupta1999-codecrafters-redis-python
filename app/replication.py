@@ -208,7 +208,7 @@ async def listen_to_master():
                 case b'REPLCONF':
                     # This is the master's way of checking whether replica is in sync. (REPLCONF GETACK *)
                     # the replica has to return the offset of the num_bytes it has processed.
-                    await write_to_master(serialize_msg(["replconf", "ack", "0"], SerializedTypes.ARRAY))
+                    await write_to_master(serialize_msg(["replconf", "ACK", "0"], SerializedTypes.ARRAY))
 
 
 #########################################################################
