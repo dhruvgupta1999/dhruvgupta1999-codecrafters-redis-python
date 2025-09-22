@@ -6,7 +6,7 @@ import socket
 from app.errors import IncrOnStringValue
 from app.memory_management import set_to_memstore, incr_in_memstore
 from app.redis_serialization_protocol import serialize_msg, SerializedTypes, parse_redis_bytes, OK_SIMPLE_STRING, \
-    parse_redis_bytes_multiple_cmd
+    parse_redis_bytes_multiple_cmd, CLRS
 
 MAX_MSG_LEN = 1000
 
@@ -86,14 +86,47 @@ async def _init_replica(master_addr, port):
     await send_psync()
     # Now master returns whether I need to do FULLRESYNC or partial sync.
     # It also sends an RDB file.
-    # Let's just ignore the result of this message as our replication tech doesn't have RDB support.
     sync_msg = await _master_conn_reader.read(MAX_MSG_LEN)
     print(str(sync_msg))
+    # msg format: FULLRESYNC <master_id> <offset>\r\n<length>\r\n<rdb_snap_bytes><any_other_commands_might_also_be_here>
+    # The tcp data sent by master MAY have extra commands just after the FULLRESYNC like SET/INCR/REPLCONF.
+    # So we need to parse the exact byte where FULLRESYNC part ends and next part starts.
+    remainder_bytes = get_bytes_after_fullresync(sync_msg)
+    await handle_propagated_cmds(remainder_bytes)
+
     # Now listen for propagated commands like SET/INCR
     # Start background listener.
     # IMPORTANT NOTE: We can't directly do "await listen_on_master()" else we will be blocked here.
     # We need to run this in background, so that we can continue and start the server to which clients can connect.
     asyncio.create_task(listen_to_master())
+
+def get_bytes_after_fullresync(resync_msg):
+    """
+
+    """
+    tokens = b' '.split(resync_msg)
+    # ignore first two tokens (FULLRESYNC <master_id>)
+    # third token has rdb file followed immediately by the next command (without space).
+    # third token: <offset>\r\n<length>\r\n<rdb_snapshot_bytes><any_other_commands_might_also_be_here>
+    third_token = tokens[2]
+    third_token_split = CLRS.split(third_token)
+    rdb_len = third_token_split[1]
+    rdb_len = int.from_bytes(rdb_len)
+
+
+    bytes_after_rdb_len = CLRS.join(third_token_split[2:])
+    bytes_after_rdb = bytes_after_rdb_len[rdb_len:]
+    print('bytes after rdb', bytes_after_rdb)
+
+    # keep bytes after RDB from third_token and other tokens as is.
+    result = bytes_after_rdb
+    if tokens[3:]:
+        result += b' ' + b' '.join(tokens[3:])
+    print('bytes after FULLRESYNC', result)
+    return result
+
+
+
 
 
 def get_replication_role():
@@ -187,7 +220,7 @@ async def send_psync():
 
 
 async def listen_to_master():
-    global num_bytes_processed
+
     while True:
         data = await _master_conn_reader.read(MAX_MSG_LEN)
         if not data:
@@ -195,28 +228,34 @@ async def listen_to_master():
             # Client has closed connection, so break out of loop.
             print(f"Connection closed by master")
             break
-        cmds = parse_redis_bytes_multiple_cmd(data)
-        print("cmds recvd from master:\n", cmds)
+        await handle_propagated_cmds(data)
 
-        for message in cmds:
-            # for simplicity I am handling only simple SET and INCR, no TTL nothing (unless later challenges require it).
-            # This is good enough for POC.
-            tokens = list(message)
-            first_token = tokens[0].upper()
-            print('first token:', first_token)
-            match first_token:
-                case b'SET':
-                    key, val = tokens[1], tokens[2]
-                    set_to_memstore(key, val)
-                case b'INCR':
-                    key = tokens[1]
-                    num = incr_in_memstore(key)
-                case b'REPLCONF':
-                    # This is the master's way of checking whether replica is in sync. (REPLCONF GETACK *)
-                    # the replica has to return the offset of the num_bytes it has processed.
-                    await write_to_master(serialize_msg(["replconf", "ACK", num_bytes_processed], SerializedTypes.ARRAY))
 
-        num_bytes_processed += len(data)
+
+
+async def handle_propagated_cmds(data: bytes):
+    global num_bytes_processed
+    cmds = parse_redis_bytes_multiple_cmd(data)
+    print("cmds recvd from master:\n", cmds)
+    for message in cmds:
+        # for simplicity I am handling only simple SET and INCR, no TTL nothing (unless later challenges require it).
+        # This is good enough for POC.
+        tokens = list(message)
+        first_token = tokens[0].upper()
+        print('first token:', first_token)
+        match first_token:
+            case b'SET':
+                key, val = tokens[1], tokens[2]
+                set_to_memstore(key, val)
+            case b'INCR':
+                key = tokens[1]
+                num = incr_in_memstore(key)
+            case b'REPLCONF':
+                # This is the master's way of checking whether replica is in sync. (REPLCONF GETACK *)
+                # the replica has to return the offset of the num_bytes it has processed.
+                await write_to_master(serialize_msg(["replconf", "ACK", num_bytes_processed], SerializedTypes.ARRAY))
+
+    num_bytes_processed += len(data)
 
 
 #########################################################################
