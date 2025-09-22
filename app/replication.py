@@ -88,7 +88,7 @@ async def _init_replica(master_addr, port):
     # Start background listener.
     # IMPORTANT NOTE: We can't directly do "await listen_on_master()" else we will be blocked here.
     # We need to run this in background, so that we can continue and start the server to which clients can connect.
-    asyncio.create_task(listen_on_master())
+    asyncio.create_task(listen_to_master())
 
 
 def get_replication_role():
@@ -181,7 +181,7 @@ async def send_psync():
     await write_to_master(serialize_msg(['PSYNC', '?', '-1'], SerializedTypes.ARRAY))
 
 
-async def listen_on_master():
+async def listen_to_master():
     while True:
         data = await _master_conn_reader.read(MAX_MSG_LEN)
         if not data:
@@ -196,7 +196,6 @@ async def listen_on_master():
             # for simplicity I am handling only simple SET and INCR, no TTL nothing (unless later challenges require it).
             # This is good enough for POC.
             tokens = list(message)
-            print(tokens)
             first_token = tokens[0].upper()
             print('first token:', first_token)
             match first_token:
@@ -206,6 +205,10 @@ async def listen_on_master():
                 case b'INCR':
                     key = tokens[1]
                     num = incr_in_memstore(key)
+                case b'REPLCONF':
+                    # This is the master's way of checking whether replica is in sync. (REPLCONF GETACK *)
+                    # the replica has to return the offset of the num_bytes it has processed.
+                    await write_to_master(serialize_msg(["replconf", "ack", "0"], SerializedTypes.ARRAY))
 
 
 #########################################################################
