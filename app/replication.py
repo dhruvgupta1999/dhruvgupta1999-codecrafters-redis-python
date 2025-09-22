@@ -89,10 +89,11 @@ async def _init_replica(master_addr, port):
     sync_msg = await _master_conn_reader.read(MAX_MSG_LEN)
     print(str(sync_msg))
     # msg format: FULLRESYNC <master_id> <offset>\r\n<length>\r\n<rdb_snap_bytes><any_other_commands_might_also_be_here>
-    # The tcp data sent by master MAY have extra commands just after the FULLRESYNC like SET/INCR/REPLCONF.
+    # The tcp packet sent by master MAY have extra commands just after the FULLRESYNC like SET/INCR/REPLCONF.
     # So we need to parse the exact byte where FULLRESYNC part ends and next part starts.
     remainder_bytes = get_bytes_after_fullresync(sync_msg)
-    await handle_propagated_cmds(remainder_bytes)
+    if remainder_bytes:
+        await handle_propagated_cmds(remainder_bytes)
 
     # Now listen for propagated commands like SET/INCR
     # Start background listener.
@@ -104,15 +105,15 @@ def get_bytes_after_fullresync(resync_msg):
     """
 
     """
-    tokens = b' '.split(resync_msg)
+    SPACE = b' '
+    tokens = resync_msg.split(SPACE)
     # ignore first two tokens (FULLRESYNC <master_id>)
     # third token has rdb file followed immediately by the next command (without space).
     # third token: <offset>\r\n<length>\r\n<rdb_snapshot_bytes><any_other_commands_might_also_be_here>
     third_token = tokens[2]
-    third_token_split = CLRS.split(third_token)
+    third_token_split = third_token.split(CLRS)
     rdb_len = third_token_split[1]
     rdb_len = int.from_bytes(rdb_len)
-
 
     bytes_after_rdb_len = CLRS.join(third_token_split[2:])
     bytes_after_rdb = bytes_after_rdb_len[rdb_len:]
