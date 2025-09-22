@@ -44,6 +44,11 @@ _replication_meta = None
 _master_conn_reader = None
 _master_conn_writer = None
 
+# num_bytes processed by replica that were sent to it by master.
+# Master occasionally pings replica to check whether the num_bytes is as expected. (using "REPLCONF ACK *"
+# to which replica replies "REPLCONF ACK <num_bytes>").
+num_bytes_processed = 0
+
 
 def get_replication_info():
     info_map = {}
@@ -182,6 +187,7 @@ async def send_psync():
 
 
 async def listen_to_master():
+    global num_bytes_processed
     while True:
         data = await _master_conn_reader.read(MAX_MSG_LEN)
         if not data:
@@ -208,7 +214,9 @@ async def listen_to_master():
                 case b'REPLCONF':
                     # This is the master's way of checking whether replica is in sync. (REPLCONF GETACK *)
                     # the replica has to return the offset of the num_bytes it has processed.
-                    await write_to_master(serialize_msg(["replconf", "ACK", "0"], SerializedTypes.ARRAY))
+                    await write_to_master(serialize_msg(["replconf", "ACK", num_bytes_processed], SerializedTypes.ARRAY))
+
+        num_bytes_processed += len(data)
 
 
 #########################################################################
