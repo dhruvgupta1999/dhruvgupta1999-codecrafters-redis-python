@@ -102,6 +102,7 @@ def parse_redis_bytes_multiple_cmd(msg: bytes) -> list[tuple[Any, int]]:
     while index < len(msg):
         val, new_index = parse_primitive(msg, index)
         result.append((val, new_index - index))
+        index = new_index
     return result
 
 
