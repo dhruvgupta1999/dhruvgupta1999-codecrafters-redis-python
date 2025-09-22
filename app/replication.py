@@ -239,7 +239,7 @@ async def handle_propagated_cmds(data: bytes):
     global num_bytes_processed
     cmds = parse_redis_bytes_multiple_cmd(data)
     print("cmds recvd from master:\n", cmds)
-    for message in cmds:
+    for message, data_len in cmds:
         # for simplicity I am handling only simple SET and INCR, no TTL nothing (unless later challenges require it).
         # This is good enough for POC.
         tokens = list(message)
@@ -257,7 +257,9 @@ async def handle_propagated_cmds(data: bytes):
                 # the replica has to return the offset of the num_bytes it has processed.
                 await write_to_master(serialize_msg(["replconf", "ACK", num_bytes_processed], SerializedTypes.ARRAY))
 
-    num_bytes_processed += len(data)
+        print("adding to num bytes", data_len)
+        num_bytes_processed += data_len
+
 
 
 #########################################################################

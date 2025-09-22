@@ -90,16 +90,18 @@ def parse_redis_bytes(msg: bytes) -> tuple[bool, Any]:
         return False, parse_primitive(msg, index)[0]
 
 
-def parse_redis_bytes_multiple_cmd(msg: bytes) -> list[Any]:
+def parse_redis_bytes_multiple_cmd(msg: bytes) -> list[tuple[Any, int]]:
     """
     Use this function if the msg may have multiple commands.
+
+    Returns the parsed commands, as well as their respective length in bytes form.
 
     """
     index = 0
     result = []
     while index < len(msg):
-        val, index = parse_primitive(msg, index)
-        result.append(val)
+        val, new_index = parse_primitive(msg, index)
+        result.append((val, new_index - index))
     return result
 
 
